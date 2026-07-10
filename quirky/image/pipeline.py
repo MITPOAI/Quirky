@@ -24,6 +24,94 @@ def generate_fbm_2d(width: int, height: int, octaves: int = 4, lacunarity: float
         
     return noise / total_amplitude
 
+
+ATTRIBUTION = "Powered by Quirky by MITPO"
+
+
+def shape_noise_spectrum(noise: np.ndarray, beta: float = 1.0) -> np.ndarray:
+    """
+    Recolor a white-noise field to a natural 1/f^beta radial power spectrum.
+    beta ~ 1.0 gives pink (film-like) grain instead of flat white noise, matching
+    the power-law statistics of real photographs. Output is renormalized to unit std.
+    Uses a real FFT (rfft2/irfft2) -- ~2x cheaper than the complex transform.
+    """
+    h, w = noise.shape[:2]
+    fy = np.fft.fftfreq(h).reshape(-1, 1)
+    fx = np.fft.rfftfreq(w).reshape(1, -1)
+    radius = np.sqrt(fy * fy + fx * fx)
+    radius[0, 0] = 1.0  # avoid divide-by-zero at DC
+    scale = 1.0 / (radius ** beta)
+
+    def _recolor(plane: np.ndarray) -> np.ndarray:
+        shaped = np.fft.irfft2(np.fft.rfft2(plane) * scale, s=(h, w))
+        std = shaped.std()
+        return shaped / std if std > 1e-8 else shaped
+
+    if noise.ndim == 2:
+        return _recolor(noise)
+    out = np.empty_like(noise)
+    for c in range(noise.shape[2]):
+        out[:, :, c] = _recolor(noise[:, :, c])
+    return out
+
+
+def apply_poisson_gaussian_noise(
+    img: np.ndarray,
+    amplitude: float = 0.02,
+    a: float = 0.008,
+    b: float = 0.0004,
+    spectral_beta: float = 1.0,
+) -> np.ndarray:
+    """
+    Physically-based heteroscedastic sensor noise (photon-transfer model).
+    Per-pixel std = sqrt(a * I + b): photon shot noise grows with brightness,
+    plus a read-noise floor b. The white field is recolored to a 1/f^beta spectrum.
+    Returns a noise field the same shape as img (float, RGB in [0,1]).
+    """
+    img = np.clip(img, 0.0, 1.0)
+    if img.ndim == 3:
+        h, w, _ = img.shape
+        # Luminance-shared component keeps fine detail correlated across R/G/B (as real
+        # scene texture is); the independent component preserves per-photosite shot noise.
+        # The shared field is pink (low-frequency dominated), so it is generated + shaped
+        # at half resolution then bilinearly upsampled -- the FFT runs on a quarter of the
+        # pixels with no visible loss. Only the near-white shot-noise part stays full-res.
+        hs, ws = max(h // 2, 8), max(w // 2, 8)
+        shared = np.random.normal(0.0, 1.0, (hs, ws))
+        if spectral_beta > 0.0:
+            shared = shape_noise_spectrum(shared, beta=spectral_beta)
+        shared = cv2.resize(shared, (w, h), interpolation=cv2.INTER_LINEAR)
+        indep = np.random.normal(0.0, 1.0, img.shape)
+        white = 0.65 * shared[:, :, None] + 0.35 * indep
+    else:
+        white = np.random.normal(0.0, 1.0, img.shape)
+        if spectral_beta > 0.0:
+            white = shape_noise_spectrum(white, beta=spectral_beta)
+    sigma = np.sqrt(np.clip(a * img + b, 0.0, None))
+    return white * sigma * amplitude
+
+
+def bayer_demosaic_roundtrip(img: np.ndarray, strength: float = 0.35) -> np.ndarray:
+    """
+    Simulate a Bayer CFA capture + bilinear demosaic to reinstate the inter-channel
+    color correlation and faint chromatic fringing real cameras produce and diffusion
+    models lack. Each channel is sampled on its RGGB sub-lattice then bilinearly
+    reconstructed to full resolution. img is float RGB in [0,1]; blend by strength.
+    """
+    h, w, _ = img.shape
+    img = np.clip(img, 0.0, 1.0)
+    r, g, b = img[:, :, 0], img[:, :, 1], img[:, :, 2]
+
+    r_full = cv2.resize(r[0::2, 0::2], (w, h), interpolation=cv2.INTER_LINEAR)
+    b_full = cv2.resize(b[1::2, 1::2], (w, h), interpolation=cv2.INTER_LINEAR)
+    g1 = cv2.resize(g[0::2, 1::2], (w, h), interpolation=cv2.INTER_LINEAR)
+    g2 = cv2.resize(g[1::2, 0::2], (w, h), interpolation=cv2.INTER_LINEAR)
+    g_full = 0.5 * (g1 + g2)
+
+    demosaiced = np.stack([r_full, g_full, b_full], axis=2)
+    return np.clip(img * (1.0 - strength) + demosaiced * strength, 0.0, 1.0)
+
+
 class ImageHumanizer:
     @staticmethod
     def humanize(
@@ -116,28 +204,37 @@ class ImageHumanizer:
         specular_disruption = 1.0 + alpha * fbm_3d * cos_theta_3d * mask_3d
         img_textured = np.clip(img_textured * specular_disruption, 0.0, 1.0)
 
-        # 3. Procedural Perturbation Overlay (mimic analog camera sensor grain)
-        # Formula: I_out(x,y) = I_in(x,y) + delta * N(x,y) * (1 - L(x,y))
-        # Compute local luminance L(x,y)
-        # Standard relative luminance coefficients: Y = 0.2126 R + 0.7152 G + 0.0722 B
+        # 3. Sensor reconstruction + physically-based grain
+        # 3a. Bayer CFA demosaic round-trip -> reinstalls inter-channel color correlation
+        #     and faint chromatic fringing that real cameras leave and diffusion lacks.
+        img_textured = bayer_demosaic_roundtrip(img_textured, strength=0.18 * intensity)
+
+        # 3b. Poisson-Gaussian heteroscedastic sensor noise (photon-transfer model),
+        #     var = a*I + b, gently recolored (beta~0.5) so it keeps enough high-frequency
+        #     content to restore real micro-gradient density while still reading filmic.
+        #     delta keeps the original grain knob meaningful as the overall amplitude.
+        grain = apply_poisson_gaussian_noise(
+            img_textured,
+            amplitude=delta * intensity * 22.0,
+            a=0.010,
+            b=0.0006,
+            spectral_beta=0.5,
+        )
+
+        # Perceptual weighting: real film/sensor grain reads strongest in shadows/mid-tones.
+        # Standard relative luminance: Y = 0.2126 R + 0.7152 G + 0.0722 B
         luminance = 0.2126 * img_textured[:, :, 0] + 0.7152 * img_textured[:, :, 1] + 0.0722 * img_textured[:, :, 2]
-        luminance_3d = np.expand_dims(luminance, axis=2)
-        
-        # Generate multi-scale noise N(x, y)
-        noise_fine = np.random.normal(0, 0.5, img_textured.shape)
-        noise_coarse = np.random.normal(0, 0.5, (h // 2, w // 2, c))
-        noise_coarse_upscaled = cv2.resize(noise_coarse, (w, h), interpolation=cv2.INTER_LINEAR)
-        
-        # Multi-scale procedural noise
-        noise_pattern = 0.7 * noise_fine + 0.3 * noise_coarse_upscaled
-        
-        # Apply grain heavily in mid-tones and shadows: delta * N * (1 - L)
-        # We scale this by a factor of 3.0 to make the film grain crisp and visually apparent
-        grain = delta * intensity * noise_pattern * (1.0 - luminance_3d) * 3.0
-        
-        # Add grain to image and clip to valid bounds
-        img_out = img_textured + grain
+        shadow_bias = np.expand_dims(1.0 - 0.5 * luminance, axis=2)
+
+        img_out = img_textured + grain * shadow_bias
         img_out = np.clip(img_out * 255.0, 0.0, 255.0).astype(np.uint8)
-        
+
         # Save output image
         Image.fromarray(img_out).save(output_path)
+
+        return {
+            "attribution": ATTRIBUTION,
+            "modality": "image",
+            "params": {"intensity": intensity, "gamma": gamma, "delta": delta},
+            "output_path": output_path,
+        }

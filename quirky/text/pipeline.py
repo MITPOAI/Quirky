@@ -1,22 +1,35 @@
 import re
 import numpy as np
 
+ATTRIBUTION = "Powered by Quirky by MITPO"
+
+
 class TextHumanizer:
+    # NOTE: trope patterns must NOT end with ",\b" -- a comma->space transition is not a
+    # regex word boundary, so ",\b" never matches. Anchor on the word, comma optional.
+    # Longer phrases are listed before the shorter phrases they contain.
     AI_REPLACEMENTS = {
-        r"\bFurthermore,\b": "Plus,",
-        r"\bMoreover,\b": "On top of that,",
-        r"\bIn conclusion,\b": "In short,",
-        r"\bIn summary,\b": "Basically,",
-        r"\bIt is important to note that\b": "Keep in mind that",
-        r"\bit is important to note that\b": "honestly,",
-        r"\bAs an AI,?\b": "Honestly,",
-        r"\bAs an AI language model,?\b": "As far as I can tell,",
-        r"\bconsequently\b": "so",
-        r"\bConsequently\b": "So",
-        r"\butilize\b": "use",
-        r"\butilizes\b": "uses",
-        r"\bfacilitates optimization\b": "makes it run better",
         r"\bthis approach facilitates optimization\b": "this is how you actually make it run faster",
+        r"\bfacilitates optimization\b": "makes it run better",
+        r"\bAs an AI language model\b,?": "As far as I can tell,",
+        r"\bAs an AI\b,?": "Honestly,",
+        r"\bit is important to note that\b": "honestly,",
+        r"\bIt is important to note that\b": "Keep in mind that",
+        r"\bFurthermore\b,?": "Plus,",
+        r"\bMoreover\b,?": "On top of that,",
+        r"\bAdditionally\b,?": "Also,",
+        r"\badditionally\b,?": "also,",
+        r"\bFirstly\b,?": "First,",
+        r"\bLastly\b,?": "Finally,",
+        r"\bIn conclusion\b,?": "In short,",
+        r"\bIn summary\b,?": "Basically,",
+        r"\bConsequently\b,?": "So,",
+        r"\bconsequently\b": "so",
+        r"\butilizes\b": "uses",
+        r"\butilize\b": "use",
+        r"\bit is essential to\b": "you really need to",
+        r"\bIt is essential to\b": "You really need to",
+        r"\bin order to\b": "to",
     }
     
     CONTRACTIONS = {
@@ -73,10 +86,13 @@ class TextHumanizer:
         except Exception:
             gamma = 1.0
         
-        # If the slope indicates an artificial flat or over-steep topology,
-        # we perform word substitutions using standard synonyms to sculpt the distribution
-        if not (0.75 < gamma < 1.25) and np.random.rand() < intensity:
-            # We want to swap synonymous structures
+        # The further gamma sits from the human-like ~1.0 exponent, the more the
+        # distribution is sculpted. Zipf-guided: swaps target over-frequent tokens,
+        # pushing mass toward rarer synonyms to raise local perplexity variance.
+        deviation = abs(gamma - 1.0)
+        swap_gate = min(1.0, intensity * (0.4 + deviation))
+        if np.random.rand() < swap_gate:
+            # We want to swap synonymous structures (lower-frequency alternatives)
             synonyms = {
                 "utilize": ["use", "try"],
                 "additionally": ["also", "besides", "plus"],
@@ -87,7 +103,17 @@ class TextHumanizer:
                 "ensure": ["make sure", "check", "verify"],
                 "foster": ["build", "help", "grow"],
                 "delve": ["go deep", "look into", "explore"],
-                "consequently": ["so", "therefore", "thus"]
+                "consequently": ["so", "therefore", "thus"],
+                "numerous": ["many", "lots of", "plenty of"],
+                "leverage": ["use", "tap", "lean on"],
+                "facilitate": ["help", "ease", "smooth"],
+                "demonstrate": ["show", "prove", "point to"],
+                "significant": ["big", "major", "real"],
+                "essential": ["key", "vital", "core"],
+                "however": ["but", "though", "still"],
+                "therefore": ["so", "which means", "thus"],
+                "optimal": ["best", "ideal", "sharpest"],
+                "robust": ["solid", "sturdy", "tough"],
             }
             
             # Walk through words and swap with synonyms with some probability
@@ -122,6 +148,91 @@ class TextHumanizer:
         return text
 
     @staticmethod
+    def _split_sentences(text: str):
+        """Split into [(sentence, delimiter), ...] preserving terminal punctuation."""
+        parts = re.split(r'([.!?]+)', text)
+        sents = []
+        i = 0
+        while i < len(parts):
+            s = parts[i].strip()
+            if i + 1 < len(parts) and re.match(r'^[.!?]+$', parts[i + 1]):
+                delim = parts[i + 1]
+                i += 2
+            else:
+                delim = "."
+                i += 1
+            if s:
+                sents.append((s, delim))
+        return sents
+
+    @staticmethod
+    def inject_burstiness(text: str, intensity: float = 0.5, target_cv: float = 0.55) -> str:
+        """
+        Human sentence lengths are ~lognormal with a high coefficient of variation
+        (CV ~ 0.5-0.7); AI text is uniform. If the input CV is below target, fragment
+        some long sentences at clause markers and merge some short ones, raising
+        burstiness -- the single strongest signal separating human from AI prose.
+        """
+        sents = TextHumanizer._split_sentences(text)
+        if len(sents) < 3:
+            return text
+
+        lengths = np.array([len(s.split()) for s, _ in sents], dtype=float)
+        cv = lengths.std() / (lengths.mean() + 1e-8)
+        if cv >= target_cv:
+            return text  # already bursty enough
+
+        out = []
+        j = 0
+        while j < len(sents):
+            s, d = sents[j]
+            wc = len(s.split())
+
+            # Fragment a long sentence at a mid clause marker
+            if wc > 16 and np.random.rand() < intensity:
+                markers = list(re.finditer(r'\s+(and|but|so|because|which|while|although)\s+', s))
+                if markers:
+                    m = markers[len(markers) // 2]
+                    first = s[:m.start()].strip().rstrip(',')
+                    second = s[m.end():].strip()
+                    if first and second:
+                        second = second[0].upper() + second[1:]
+                        out.append(f"{first}.")
+                        out.append(f"{second}{d}")
+                        j += 1
+                        continue
+
+            # Merge a short sentence with the next into one longer clause
+            if wc < 9 and j + 1 < len(sents) and np.random.rand() < intensity:
+                s2, d2 = sents[j + 1]
+                joiner = np.random.choice([" — ", ", and ", ", "])
+                tail = (s2[0].lower() + s2[1:]) if s2 else s2
+                out.append(f"{s.rstrip('.')}{joiner}{tail}{d2}")
+                j += 2
+                continue
+
+            out.append(f"{s}{d}")
+            j += 1
+
+        return " ".join(out)
+
+    @staticmethod
+    def diversify_punctuation(text: str, intensity: float = 0.5) -> str:
+        """
+        Humans use dashes, ellipses and parentheticals far more than AI, which is
+        trained toward grammatical completeness. Swap a small fraction of commas for
+        em-dashes / ellipses at a controlled, intensity-scaled rate.
+        """
+        def _repl(_m):
+            r = np.random.rand()
+            if r < 0.10 * intensity:
+                return " —"
+            if r < 0.15 * intensity:
+                return " …"
+            return ","
+        return re.sub(r',', _repl, text)
+
+    @staticmethod
     def humanize(text: str, intensity: float = 0.5) -> str:
         """
         Humanizes AI-generated text by adjusting perplexity burstiness,
@@ -133,14 +244,16 @@ class TextHumanizer:
         # First apply Zipf-Mandelbrot Information Theory Sculpting
         processed = TextHumanizer.sculpt_zipf_mandelbrot(text, intensity=intensity)
         
-        # 1. Clean AI Cliches & Tropes
+        # 1. Clean AI Cliches & Tropes (near-deterministic at high intensity: these
+        #    boilerplate transitions are the strongest lexical AI tells)
+        cliche_gate = min(1.0, 0.5 + intensity)
         for pattern, replacement in TextHumanizer.AI_REPLACEMENTS.items():
-            if np.random.rand() < intensity:
+            if np.random.rand() < cliche_gate:
                 processed = re.sub(pattern, replacement, processed)
-                
+
         # 2. Insert Contractions
         for pattern, contraction in TextHumanizer.CONTRACTIONS.items():
-            if np.random.rand() < intensity:
+            if np.random.rand() < cliche_gate:
                 processed = re.sub(pattern, contraction, processed)
                 
         # 3. Burstiness and Synclastic Restructuring
@@ -199,9 +312,13 @@ class TextHumanizer:
             
         # Re-assemble text
         output = " ".join(reconstructed)
-        
+
+        # 4. Burstiness targeting + human punctuation rhythm (highest-signal steps)
+        output = TextHumanizer.inject_burstiness(output, intensity=intensity)
+        output = TextHumanizer.diversify_punctuation(output, intensity=intensity)
+
         # Clean double spaces and punctuation issues
         output = re.sub(r'\s+', ' ', output)
         output = re.sub(r'\s+([.!?])', r'\1', output)
-        
+
         return output

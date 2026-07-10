@@ -16,7 +16,9 @@ from quirky.detector.formulas import (
     compute_text_repetition_score,
     compute_text_prompt_leak_score,
     compute_audio_plastic_score,
-    compute_audio_emotion_score
+    compute_audio_emotion_score,
+    compute_image_spectral_slope,
+    compute_image_channel_correlation
 )
 
 class DetectorEngine:
@@ -74,13 +76,16 @@ class DetectorEngine:
         try:
             with Image.open(filepath) as img:
                 img_gray = np.array(img.convert("L"))
-                
+                img_rgb = np.array(img.convert("RGB"))
+
             ai = compute_image_ai_score(img_gray)
             plastic = compute_image_plastic_score(img_gray)
             symmetry = compute_image_symmetry_score(img_gray)
             lighting = compute_image_lighting_score(img_gray)
             texture = compute_image_texture_score(img_gray)
             repetition = compute_image_repetition_score(img_gray)
+            spectral_slope = compute_image_spectral_slope(img_gray)
+            channel_corr = compute_image_channel_correlation(img_rgb)
             
             # Simple prompt leak check for images: read exif / png info chunks
             leak = 0.0
@@ -102,12 +107,15 @@ class DetectorEngine:
                 "lighting_score": round(lighting, 3),
                 "texture_score": round(texture, 3),
                 "repetition_score": round(repetition, 3),
-                "prompt_leak_score": round(leak, 3)
+                "prompt_leak_score": round(leak, 3),
+                "spectral_slope": round(spectral_slope, 3),
+                "channel_corr": round(channel_corr, 3)
             }
         except Exception:
             return {
                 "ai_score": 0.5, "plastic_score": 0.5, "emotion_score": 0.5, "symmetry_score": 0.5,
-                "lighting_score": 0.5, "texture_score": 0.5, "repetition_score": 0.5, "prompt_leak_score": 0.0
+                "lighting_score": 0.5, "texture_score": 0.5, "repetition_score": 0.5, "prompt_leak_score": 0.0,
+                "spectral_slope": -2.0, "channel_corr": 0.0
             }
 
     @staticmethod

@@ -277,3 +277,67 @@ def compute_audio_emotion_score(audio_data: np.ndarray, sr: int) -> float:
         return float(emotion)
     except Exception:
         return 0.3
+
+# --- Natural-Statistics Image Formulas (physically-grounded realism metrics) ---
+
+def compute_image_spectral_slope(img_gray: np.ndarray) -> float:
+    """
+    Azimuthally-averaged (radial) power-spectrum slope in log-log space.
+    Natural photographs follow a power law P(f) ~ f^alpha with alpha ~ -2.
+    Diffusion/GAN output deviates (excess or deficit high-frequency energy),
+    so a slope pushed back toward -2 indicates more natural statistics.
+    """
+    try:
+        I = img_gray.astype(float)
+        step = max(1, max(I.shape) // 256)  # coarse metric: cap work at ~256px
+        if step > 1:
+            I = I[::step, ::step]
+        I = I - I.mean()
+        f = np.fft.fftshift(np.fft.fft2(I))
+        ps = np.abs(f) ** 2
+
+        h, w = ps.shape
+        cy, cx = h // 2, w // 2
+        y, x = np.ogrid[-cy:h - cy, -cx:w - cx]
+        r = np.sqrt(x * x + y * y).astype(int)
+
+        rmax = int(min(cy, cx))
+        if rmax < 8:
+            return -2.0
+        tbin = np.bincount(r.ravel(), ps.ravel())
+        nr = np.bincount(r.ravel())
+        radial = tbin[1:rmax] / (nr[1:rmax] + 1e-8)
+        freqs = np.arange(1, rmax)
+
+        mask = radial > 0
+        if mask.sum() < 8:
+            return -2.0
+        slope, _ = np.polyfit(np.log(freqs[mask]), np.log(radial[mask]), 1)
+        return float(slope)
+    except Exception:
+        return -2.0
+
+def compute_image_channel_correlation(img_rgb: np.ndarray) -> float:
+    """
+    Mean absolute inter-channel correlation of high-pass residuals.
+    Real cameras (Bayer CFA + demosaic) leave strongly correlated fine detail
+    across R, G, B; many synthetic images do not. Higher = more camera-like.
+    """
+    try:
+        arr = img_rgb.astype(float)
+        if arr.ndim != 3 or arr.shape[2] < 3:
+            return 0.0
+        step = max(1, max(arr.shape[:2]) // 256)  # coarse metric: cap work at ~256px
+        if step > 1:
+            arr = arr[::step, ::step, :]
+        from scipy.ndimage import uniform_filter
+        hp = [arr[:, :, c] - uniform_filter(arr[:, :, c], size=3) for c in range(3)]
+        pairs = [
+            np.corrcoef(hp[0].ravel(), hp[1].ravel())[0, 1],
+            np.corrcoef(hp[1].ravel(), hp[2].ravel())[0, 1],
+            np.corrcoef(hp[0].ravel(), hp[2].ravel())[0, 1],
+        ]
+        vals = [v for v in pairs if np.isfinite(v)]
+        return float(np.mean(np.abs(vals))) if vals else 0.0
+    except Exception:
+        return 0.0
