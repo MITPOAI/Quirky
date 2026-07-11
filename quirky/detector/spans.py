@@ -224,17 +224,18 @@ class SlopScorer:
             cliche_hits = sum(1 for r in reasons if r.startswith("cliche:"))
             hedge_hits = sum(1 for r in reasons if r.startswith("hedge:"))
             filler_hits = sum(1 for r in reasons if r.startswith("filler:"))
-            expanded_hits = sum(1 for r in reasons if r.startswith("expanded:"))
             
-            local_score = (
-                0.35 * min(cliche_hits, 3) / 3.0 +
-                0.20 * min(hedge_hits, 2) / 2.0 +
-                0.15 * min(filler_hits, 2) / 2.0 +
-                0.15 * contraction_deficit +
-                0.15 * (1.0 - min(abs(z_score), 2.0) / 2.0)
+            hits_score = (
+                0.50 * min(cliche_hits, 1) + 0.15 * max(0, cliche_hits - 1) +
+                0.30 * min(hedge_hits, 1) + 0.10 * max(0, hedge_hits - 1) +
+                0.30 * min(filler_hits, 1) + 0.10 * max(0, filler_hits - 1)
             )
+            cont_score = 0.20 * contraction_deficit
+            len_score = 0.15 * (1.0 - min(abs(z_score), 2.0) / 2.0)
+            
+            local_score = hits_score + cont_score + len_score
             if leak_detected:
-                local_score = max(local_score, 0.85)
+                local_score = max(local_score, 0.90)
                 
             local_score = float(np.clip(local_score, 0.0, 1.0))
             

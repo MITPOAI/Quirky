@@ -4,8 +4,24 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from quirky.detector.lexicons import STOPWORDS
+from quirky.detector.lexicons import AI_CLICHES, HEDGES, FILLERS, STOPWORDS
+from quirky.detector.calibrate import _EXPANDED
 from quirky.plugins.dl import CACHE_DIR, MODEL_REGISTRY
+from quirky.text.pipeline import TextHumanizer
+
+# Compile set of all words involved in the styling lexicons and humanizer rules
+STYLE_WORDS = set()
+for word_list in (AI_CLICHES, HEDGES, FILLERS, _EXPANDED):
+    for phrase in word_list:
+        STYLE_WORDS.update(re.findall(r"\b\w+\b", phrase.lower()))
+
+for pat, rep in TextHumanizer.AI_REPLACEMENTS.items():
+    STYLE_WORDS.update(re.findall(r"\b\w+\b", pat.lower()))
+    STYLE_WORDS.update(re.findall(r"\b\w+\b", rep.lower()))
+
+for pat, rep in TextHumanizer.CONTRACTIONS.items():
+    STYLE_WORDS.update(re.findall(r"\b\w+\b", pat.lower()))
+    STYLE_WORDS.update(re.findall(r"\b\w+\b", rep.lower()))
 
 _ONNX_SESSION = None
 _TOKENIZER = None
@@ -26,11 +42,13 @@ def get_cached_model_path(name: str) -> Optional[str]:
 
 
 def get_jaccard_tokens(s: str) -> set[str]:
-    """Tokenize and filter text into content words (excluding stopwords but preserving numbers)."""
+    """Tokenize and filter text into content words (excluding stopwords and style words, preserving numbers)."""
     tokens = re.findall(r"\b\w+\b", s.lower())
     filtered = []
     for t in tokens:
         if t in STOPWORDS and not any(c.isdigit() for c in t):
+            continue
+        if t in STYLE_WORDS:
             continue
         filtered.append(t)
     return set(filtered)

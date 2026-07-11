@@ -209,15 +209,15 @@ uv run python quirky/benchmarks/bench.py        # detector statistics
 
 Text humanization runs **&lt; 1 ms**. Image/audio full pipelines are heavier (the image path includes a bilateral-filter restoration stage; audio includes `librosa` F0) — see the eval-suite notes for the isolated-transform timings and how to amortize F0 for strict latency.
 
-## Wire into your coding agent (roadmap)
+## Coding agent integration
 
-Quirky is built to plug into whatever agent you already use — Claude Code, Cursor, or Codex — through one shared, portable layer:
+Quirky is fully integrated into Claude Code, Cursor, and Codex through a shared, portable layer:
 
-- **MCP server** exposing `score` / `critique` / `humanize` / `rewrite` as tools any MCP-capable agent can call, so the *fixing* happens in-editor, not just the scoring.
-- **Portable operating rules** — a single root `AGENTS.md` (read natively by Codex and Cursor) plus a one-line `CLAUDE.md` that `@AGENTS.md`-imports it, so Quirky's "terse, no-slop" house style applies everywhere at once.
-- **Auto-check hook** (Claude Code) that runs the slop gate when the agent finishes writing marketing/creative text and feeds the flagged spans back for a surgical fix.
+- **MCP server** — exposes `quirky_score_text`, `quirky_critique_text`, `quirky_fix_text`, `quirky_tighten_text`, `quirky_detect_media`, and `quirky_humanize_media` as tools any MCP-capable agent can call, enabling in-editor fixing and humanization.
+- **Idempotent scaffolding (`quirky init`)** — sets up a single root `AGENTS.md` (read natively by Codex and Cursor), a one-line `CLAUDE.md` referencing it, and a `.cursor/rules/quirky.mdc` rule file, enforcing a clean, anti-slop house style everywhere.
+- **Auto-check hooks (Claude Code)** — configures `PostToolUse` and `Stop` hooks that run the slop scorer on prose files and return surgical fixes or block commits when slop is detected.
 
-Not shipped yet; this is the active roadmap and contributions are welcome. The pure-math core above already works standalone today via the CLI and the local web dashboard.
+To configure these coding integrations, see the [Cross-Tool Integration Guide](docs/CROSSTOOL.md).
 
 ## Contributing
 

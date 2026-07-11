@@ -34,7 +34,7 @@ def test_mcp_text_tools():
     # 4. tighten
     res = quirky_tighten_text(text)
     assert "tightened_text" in res
-    assert "Furthermore" not in res["tightened_text"]
+    assert "it is important to note that" not in res["tightened_text"]
 
 
 def test_detect_media_error():

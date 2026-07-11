@@ -240,11 +240,11 @@ def tighten(text: str) -> str:
         pattern = r"\b" + re.escape(phrase) + r"\b"
         tightened = re.sub(pattern, "", tightened, flags=re.IGNORECASE)
         
-    # Clean whitespace and spacing
-    tightened = re.sub(r"\s+", " ", tightened)
-    tightened = re.sub(r"\s+([.,!?])", r"\1", tightened)
-    tightened = re.sub(r",\s*,", ",", tightened)
-    tightened = re.sub(r"\b,\s+([.!?])", r"\1", tightened)
+    # Clean whitespace and spacing (horizontal space only to preserve line-endings)
+    tightened = re.sub(r"[ \t]+", " ", tightened)
+    tightened = re.sub(r"[ \t]+([.,!?])", r"\1", tightened)
+    tightened = re.sub(r",[ \t]*,", ",", tightened)
+    tightened = re.sub(r"\b,[ \t]+([.!?])", r"\1", tightened)
     tightened = tightened.strip()
     
     # Restore sentinels

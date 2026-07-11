@@ -119,7 +119,7 @@ def quirky_humanize_media(path: str, output_path: str | None = None, intensity: 
     try:
         abs_in = os.path.abspath(path)
         if not os.path.exists(abs_in):
-            return {"error": f"Input file not found at: {abs_in}"}
+            return {"error": f"Input file not found at: {abs_in}", "attribution": ATTRIBUTION}
             
         stem, ext = os.path.splitext(abs_in)
         ext_lower = ext.lower()

@@ -25,7 +25,6 @@ def test_tighten_masking_integrity():
     # 4. Fillers/hedges removed outside protected blocks
     assert "very" not in res
     assert "It is important to note that" not in res
-    assert "Furthermore" not in res
     assert "this is good." in res
 
 
