@@ -1,8 +1,10 @@
 {
   "mcpServers": {
     "quirky": {
-      "command": "python",
+      "command": "uv",
       "args": [
+        "run",
+        "python",
         "-m",
         "quirky.mcp.server"
       ]
