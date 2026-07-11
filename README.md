@@ -15,6 +15,15 @@
   Pure math &amp; physics — no cloud, no GPU, no model weights, no API keys.
 </p>
 
+<p align="center">
+  <b><a href="#quickstart">Quickstart</a></b> &nbsp;•&nbsp;
+  <b><a href="#coding-agent-integration">Coding Agent Integration</a></b> &nbsp;•&nbsp;
+  <b><a href="#before--after">Before / After</a></b> &nbsp;•&nbsp;
+  <b><a href="#how-it-works-the-math">The Science & Math</a></b> &nbsp;•&nbsp;
+  <b><a href="#web-dashboard-optional">Web Dashboard</a></b> &nbsp;•&nbsp;
+  <b><a href="#benchmarks">Benchmarks</a></b>
+</p>
+
 ---
 
 ## Why this exists
