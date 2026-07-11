@@ -6,8 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -m quirky.hooks.check --event post-tool-use",
-            "timeout": 30
+            "command": "uv run --project \"${CLAUDE_PLUGIN_ROOT}/..\" python -m quirky.hooks.check --event post-tool-use",
+            "timeout": 120
           }
         ]
       }
@@ -17,8 +17,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -m quirky.hooks.check --event stop",
-            "timeout": 60
+            "command": "uv run --project \"${CLAUDE_PLUGIN_ROOT}/..\" python -m quirky.hooks.check --event stop",
+            "timeout": 120
           }
         ]
       }
