@@ -27,29 +27,57 @@ class CommentPrunerSkill(BaseSkill):
         i = 0
         n = len(lines)
 
+        in_js_block = False
+        in_py_docstring = None  # '"""' or "'''"
+
         while i < n:
             line = lines[i]
-            stripped = line.lstrip()
+            stripped = line.strip()
 
-            # Identify if it is a single-line comment
-            is_py_comment = stripped.startswith("#")
-            is_js_comment = stripped.startswith("//")
+            # State transitions for block comments / multi-line docstrings
+            if not in_py_docstring and not in_js_block:
+                if stripped.startswith('"""'):
+                    if not (stripped.endswith('"""') and len(stripped) >= 6):
+                        in_py_docstring = '"""'
+                elif stripped.startswith("'''"):
+                    if not (stripped.endswith("'''") and len(stripped) >= 6):
+                        in_py_docstring = "'''"
+                elif stripped.startswith("/*"):
+                    if "*/" not in stripped:
+                        in_js_block = True
+            elif in_py_docstring:
+                if in_py_docstring in stripped:
+                    in_py_docstring = None
+                cleaned_lines.append(line)
+                i += 1
+                continue
+            elif in_js_block:
+                if "*/" in stripped:
+                    in_js_block = False
+                cleaned_lines.append(line)
+                i += 1
+                continue
+
+            # Standard single-line comment check
+            stripped_left = line.lstrip()
+            is_py_comment = stripped_left.startswith("#")
+            is_js_comment = stripped_left.startswith("//")
 
             if is_py_comment or is_js_comment:
                 # Find the next non-empty, non-comment line of code
                 next_code_line = ""
                 j = i + 1
                 while j < n:
-                    next_stripped = lines[j].lstrip()
+                    next_stripped = lines[j].strip()
                     if next_stripped and not next_stripped.startswith("#") and not next_stripped.startswith("//") and not next_stripped.startswith("/*") and not next_stripped.startswith("*"):
                         next_code_line = next_stripped
                         break
-                    # If we find another comment block or boundary, stop
-                    if next_stripped.startswith("#") != is_py_comment and next_stripped.startswith("//") != is_js_comment:
+                    # If we find another block/docstring, stop looking
+                    if next_stripped.startswith('"""') or next_stripped.startswith("'''") or next_stripped.startswith("/*"):
                         break
                     j += 1
 
-                if next_code_line and self._is_redundant(stripped, next_code_line):
+                if next_code_line and self._is_redundant(stripped_left, next_code_line):
                     # Redundant comment: skip it (strip it)
                     i += 1
                     continue
@@ -57,7 +85,6 @@ class CommentPrunerSkill(BaseSkill):
             cleaned_lines.append(line)
             i += 1
 
-        # Preserve line ending structure
         return "".join(cleaned_lines)
 
     def _is_redundant(self, comment: str, code: str) -> bool:
@@ -94,7 +121,6 @@ class CommentPrunerSkill(BaseSkill):
             if cw in cd_words:
                 matches += 1
                 continue
-            # Handle common abbreviations (e.g. idx -> index, msg -> message)
             matched = False
             for w in cd_words:
                 if len(w) > 2 and len(cw) > 2:
@@ -114,7 +140,6 @@ class CommentPrunerSkill(BaseSkill):
         }
         has_trivial_verb = comm_words[0] in trivial_verbs
         
-        # If comment overlaps heavily with the code, it is redundant
         if overlap_ratio >= 0.5:
             return True
         if has_trivial_verb and matches >= 1:

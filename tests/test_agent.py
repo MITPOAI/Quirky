@@ -30,7 +30,7 @@ def test_quirky_agent_media_pipeline(mock_analyze):
     
     # Mock AssetOptimizerSkill's execute method
     mock_opt = MagicMock(return_value="mock_output.png")
-    agent._skills_map["asset_optimizer"].execute = mock_opt
+    agent.registry.get("asset_optimizer").execute = mock_opt
     
     # We patch os.path.exists to return True for our fake image path
     with patch("os.path.exists", return_value=True):

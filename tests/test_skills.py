@@ -74,3 +74,66 @@ return responses
     # Useful comment must be preserved
     assert "# This is a useful complex fallback mechanism" in result
 
+
+def test_skill_registry_and_dynamic_skill(tmp_path):
+    from quirky.skills.base import SkillRegistry, DynamicSkill
+    
+    # Create mock skill file structure
+    skill_dir = tmp_path / "mock_skill"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("""---
+name: mock_test_skill
+description: This is a test description.
+allowed-tools: [Bash, Read]
+---
+# Mock Instructions
+Step 1: Do something.
+""", encoding="utf-8")
+    
+    # Test DynamicSkill loading
+    skill = DynamicSkill(str(skill_file))
+    assert skill.name == "mock_test_skill"
+    assert skill.description == "This is a test description."
+    assert "mock_test_skill" in skill.execute("some content")["name"]
+    
+    # Test SkillRegistry directory loading
+    registry = SkillRegistry()
+    count = registry.load_from_directory(str(tmp_path))
+    assert count == 1
+    assert registry.get("mock_test_skill") is not None
+
+
+def test_comment_pruner_skill_block_comments():
+    from quirky.skills.code import CommentPrunerSkill
+    skill = CommentPrunerSkill()
+    
+    code = """# Set x to 1
+x = 1
+\"\"\"
+Inside a docstring we explain the architecture.
+We should keep this intact.
+\"\"\"
+def hello():
+    # Return hello
+    return "hello"
+"""
+    result = skill.execute(code)
+    
+    assert "# Set x to 1" not in result
+    assert "# Return hello" not in result
+    assert "Inside a docstring we explain the architecture" in result
+
+
+def test_asset_optimizer_skill_magic_bytes(tmp_path):
+    from quirky.skills.media import AssetOptimizerSkill
+    skill = AssetOptimizerSkill()
+    
+    # Create a file with PNG magic bytes but NO extension
+    no_ext_file = tmp_path / "sample_img"
+    no_ext_file.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR...")
+    
+    detected = skill._detect_format_by_header(str(no_ext_file))
+    assert detected == ".png"
+
+

@@ -25,15 +25,26 @@ class ClichePrunerSkill(BaseSkill):
         return "Surgically replaces AI clichés and inserts contractions while preserving code and numbers."
 
     def execute(self, content: str, **kwargs) -> str:
+        if not content:
+            return ""
         if not isinstance(content, str):
-            raise TypeError("ClichePrunerSkill requires string input.")
+            return str(content)
 
         # Accept custom levels (e.g. red, amber) or process all sentences
         levels = kwargs.get("levels", {"red", "amber"})
         scorer = kwargs.get("scorer") or SlopScorer()
         
-        jaccard_thresh = float(os.environ.get("QUIRKY_JACCARD_THRESHOLD", 0.50))
-        cosine_thresh = float(os.environ.get("QUIRKY_COSINE_THRESHOLD", 0.75))
+        jaccard_thresh = kwargs.get("jaccard_threshold") or kwargs.get("jaccard_thresh")
+        if jaccard_thresh is None:
+            jaccard_thresh = float(os.environ.get("QUIRKY_JACCARD_THRESHOLD", 0.50))
+        else:
+            jaccard_thresh = float(jaccard_thresh)
+
+        cosine_thresh = kwargs.get("cosine_threshold") or kwargs.get("cosine_thresh")
+        if cosine_thresh is None:
+            cosine_thresh = float(os.environ.get("QUIRKY_COSINE_THRESHOLD", 0.75))
+        else:
+            cosine_thresh = float(cosine_thresh)
 
         spans = scorer.score_spans(content)
         fixed_chunks = []
@@ -93,8 +104,10 @@ class RhythmSculptorSkill(BaseSkill):
         return "Sculpts sentence burstiness and Zipf-Mandelbrot rhythm while protecting code and numbers."
 
     def execute(self, content: str, **kwargs) -> str:
+        if not content:
+            return ""
         if not isinstance(content, str):
-            raise TypeError("RhythmSculptorSkill requires string input.")
+            return str(content)
 
         intensity = kwargs.get("intensity", 0.5)
 
@@ -183,8 +196,10 @@ class FormattingSanitizerSkill(BaseSkill):
         return "Removes em-dashes, ellipses, normalizes spaces/quotes while protecting code and numbers."
 
     def execute(self, content: str, **kwargs) -> str:
+        if not content:
+            return ""
         if not isinstance(content, str):
-            raise TypeError("FormattingSanitizerSkill requires string input.")
+            return str(content)
 
         # Sentinel masking system to protect code/commands and numbers
         patterns = [

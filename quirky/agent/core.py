@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional
 
-from quirky.skills.base import BaseSkill
+from quirky.skills.base import BaseSkill, SkillRegistry
 from quirky.skills.text import ClichePrunerSkill, RhythmSculptorSkill, FormattingSanitizerSkill
 from quirky.skills.media import AssetOptimizerSkill
 from quirky.skills.code import CommentPrunerSkill
@@ -14,19 +14,30 @@ class QuirkyAgent:
     Orchestration agent that analyzes assets and applies skills sequentially
     to remove AI slop while keeping code regions and numbers untouched.
     """
-    def __init__(self, skills: Optional[List[BaseSkill]] = None):
-        if skills is None:
-            self.skills = [
-                CommentPrunerSkill(),
-                ClichePrunerSkill(),
-                RhythmSculptorSkill(),
-                FormattingSanitizerSkill(),
-                AssetOptimizerSkill()
-            ]
+    def __init__(self, skills: Optional[List[BaseSkill]] = None, extra_skills_dir: Optional[str] = None):
+        self.registry = SkillRegistry()
+        
+        default_skills = [
+            CommentPrunerSkill(),
+            ClichePrunerSkill(),
+            RhythmSculptorSkill(),
+            FormattingSanitizerSkill(),
+            AssetOptimizerSkill()
+        ]
+        
+        if skills is not None:
+            for s in skills:
+                self.registry.register(s)
         else:
-            self.skills = skills
-            
-        self._skills_map = {s.name: s for s in self.skills}
+            for s in default_skills:
+                self.registry.register(s)
+                
+        if extra_skills_dir:
+            self.registry.load_from_directory(extra_skills_dir)
+
+    @property
+    def skills(self) -> List[BaseSkill]:
+        return self.registry.list_skills()
 
     def list_skills(self) -> List[Dict[str, str]]:
         """Lists names and descriptions of all registered skills."""
@@ -68,7 +79,7 @@ class QuirkyAgent:
 
             if ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".wav", ".mp4", ".avi", ".mov"]:
                 # Binary/media pipeline
-                optimizer = self._skills_map.get("asset_optimizer")
+                optimizer = self.registry.get("asset_optimizer")
                 if not optimizer:
                     return {
                         "status": "error",
@@ -153,7 +164,7 @@ class QuirkyAgent:
         current_text = text
 
         # 1. Comment Pruner
-        comment_pruner = self._skills_map.get("comment_pruner")
+        comment_pruner = self.registry.get("comment_pruner")
         if comment_pruner:
             logs.append("Running comment pruner skill.")
             next_text = comment_pruner.execute(current_text)
@@ -165,7 +176,7 @@ class QuirkyAgent:
                 logs.append("Comment pruner made no changes.")
 
         # 2. Cliche Pruner
-        cliche_pruner = self._skills_map.get("cliche_pruner")
+        cliche_pruner = self.registry.get("cliche_pruner")
         if cliche_pruner:
             logs.append("Running cliché pruner skill.")
             next_text = cliche_pruner.execute(current_text, scorer=scorer)
@@ -176,8 +187,8 @@ class QuirkyAgent:
             else:
                 logs.append("Cliché pruner made no changes.")
         
-        # 2. Rhythm Sculptor
-        rhythm_sculptor = self._skills_map.get("rhythm_sculptor")
+        # 3. Rhythm Sculptor
+        rhythm_sculptor = self.registry.get("rhythm_sculptor")
         if rhythm_sculptor:
             logs.append("Running rhythm sculptor skill.")
             next_text = rhythm_sculptor.execute(current_text, intensity=intensity)
@@ -188,8 +199,8 @@ class QuirkyAgent:
             else:
                 logs.append("Rhythm sculptor made no changes.")
 
-        # 3. Formatting Sanitizer
-        formatting_sanitizer = self._skills_map.get("formatting_sanitizer")
+        # 4. Formatting Sanitizer
+        formatting_sanitizer = self.registry.get("formatting_sanitizer")
         if formatting_sanitizer:
             logs.append("Running formatting sanitizer skill.")
             next_text = formatting_sanitizer.execute(current_text)

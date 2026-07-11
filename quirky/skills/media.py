@@ -12,6 +12,7 @@ from quirky.text.pipeline import TextHumanizer
 class AssetOptimizerSkill(BaseSkill):
     """
     Optimizes media assets (images, audio, video) to restore human imperfections.
+    Identifies file modalities using magic bytes headers dynamically.
     """
     @property
     def name(self) -> str:
@@ -32,11 +33,19 @@ class AssetOptimizerSkill(BaseSkill):
         intensity = kwargs.get("intensity", 0.5)
         output_path = kwargs.get("output_path")
 
-        stem, ext = os.path.splitext(filepath)
-        ext_lower = ext.lower()
+        # Detect format dynamically by reading file header
+        detected_ext = self._detect_format_by_header(filepath)
+        if detected_ext:
+            ext_lower = detected_ext
+        else:
+            ext_lower = os.path.splitext(filepath)[1].lower()
 
+        # Build output path default if missing
         if output_path is None:
-            output_path = f"{stem}.humanized{ext}"
+            stem, ext = os.path.splitext(filepath)
+            # If input file had no extension, append the detected format
+            ext_to_use = ext if ext else ext_lower
+            output_path = f"{stem}.humanized{ext_to_use}"
         else:
             output_path = os.path.abspath(output_path)
 
@@ -55,3 +64,37 @@ class AssetOptimizerSkill(BaseSkill):
                 f.write(humanized)
 
         return output_path
+
+    def _detect_format_by_header(self, filepath: str) -> str | None:
+        try:
+            with open(filepath, "rb") as f:
+                header = f.read(16)
+            if len(header) < 4:
+                return None
+
+            # PNG signature
+            if header.startswith(b"\x89PNG\r\n\x1a\n"):
+                return ".png"
+
+            # JPEG signature
+            if header.startswith(b"\xff\xd8\xff"):
+                return ".jpg"
+
+            # BMP signature
+            if header.startswith(b"BM"):
+                return ".bmp"
+
+            # RIFF based formats (WAV, WebP)
+            if header.startswith(b"RIFF") and len(header) >= 12:
+                sub = header[8:12]
+                if sub == b"WEBP":
+                    return ".webp"
+                if sub == b"WAVE":
+                    return ".wav"
+
+            # MP4 / Common video start signatures
+            if len(header) >= 8 and (header[4:8] == b"ftyp" or header.startswith(b"\x00\x00\x00")):
+                return ".mp4"
+        except Exception:
+            pass
+        return None
