@@ -4,10 +4,8 @@
       "command": "uv",
       "args": [
         "run",
-        "--project",
-        "${CLAUDE_PLUGIN_ROOT}/..",
-        "--extra",
-        "agent",
+        "--with",
+        "quirky[agent]",
         "python",
         "-m",
         "quirky.mcp.server"

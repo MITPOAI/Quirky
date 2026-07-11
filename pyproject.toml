@@ -1,6 +1,6 @@
 [project]
 name = "quirky"
-version = "0.1.0"
+version = "0.1.2"
 description = "Quirky Human Preference Engine: A Universal Alignment Layer to restore human imperfection to synthetic media"
 readme = "README.md"
 requires-python = ">=3.10"
