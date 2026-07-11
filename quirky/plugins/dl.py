@@ -28,6 +28,12 @@ CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "quirky", "models")
 
 # name -> (hf_repo, filename, license, task). Commercial-safe licenses only.
 MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
+    "minilm_embed": {
+        "repo": "Xenova/all-MiniLM-L6-v2",
+        "file": "onnx/model.onnx",
+        "license": "Apache-2.0",
+        "task": "embedding",
+    },
     "realesrgan_x4": {
         "repo": "Xenova/real-esrgan",
         "file": "onnx/RealESRGAN_x4plus.onnx",
