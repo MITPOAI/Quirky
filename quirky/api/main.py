@@ -1,8 +1,7 @@
 import os
-import json
 import shutil
 import uuid
-from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -89,32 +88,6 @@ async def api_humanize(
         return JSONResponse(status_code=500, content={"error": str(e)})
     # We don't delete temp_out immediately because FileResponse needs to stream it.
     # It will be cleared on next server run or scheduled cleanup.
-
-@app.websocket("/api/ws/compare")
-async def websocket_compare(websocket: WebSocket):
-    """
-    Live Websocket connection for side-by-side processing progression logs.
-    """
-    await websocket.accept()
-    try:
-        while True:
-            # Wait for query or request parameters
-            data = await websocket.receive_text()
-            req = json.loads(data)
-            
-            # Simulate real-time progress steps for a gorgeous UI connection
-            steps = ["Segmenting regions via SAM2...", "Running local blending...", "Adding grain perturbation...", "Finalizing alignment..."]
-            for idx, step in enumerate(steps):
-                await websocket.send_json({
-                    "progress": int((idx + 1) / len(steps) * 100),
-                    "status": step
-                })
-                import asyncio
-                await asyncio.sleep(0.4)
-                
-            await websocket.send_json({"progress": 100, "status": "Ready"})
-    except WebSocketDisconnect:
-        pass
 
 # Serve static web frontend
 web_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
