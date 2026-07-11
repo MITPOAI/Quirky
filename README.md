@@ -217,7 +217,16 @@ Quirky is fully integrated into Claude Code, Cursor, and Codex through a shared,
 - **Idempotent scaffolding (`quirky init`)** — sets up a single root `AGENTS.md` (read natively by Codex and Cursor), a one-line `CLAUDE.md` referencing it, and a `.cursor/rules/quirky.mdc` rule file, enforcing a clean, anti-slop house style everywhere.
 - **Auto-check hooks (Claude Code)** — configures `PostToolUse` and `Stop` hooks that run the slop scorer on prose files and return surgical fixes or block commits when slop is detected.
 
-To configure these coding integrations, see the [Cross-Tool Integration Guide](docs/CROSSTOOL.md).
+To configure these coding integrations, see the [Cross-Tool Integration Guide](docs/CROSSTOOL.md) or use this quickstart:
+
+```bash
+# 1. Initialize rules & configurations in your target repo path:
+uv run quirky init --path /path/to/repo
+
+# 2. Add and install the Claude Code plugin globally:
+claude plugin marketplace add MITPOAI/Quirky
+claude plugin install quirky
+```
 
 ## Contributing
 
