@@ -163,7 +163,7 @@ from quirky.image.pipeline import ImageHumanizer
 
 scores = DetectorEngine.analyze_asset("ai_image.png")["metadata"]
 meta   = ImageHumanizer.humanize("ai_image.png", "out.png", intensity=0.6)
-print(meta["attribution"])   # "Powered by Quirky by MITPO"
+print(meta["attribution"])   # "Powered by Quirky (MITPO)"
 ```
 
 ---
@@ -227,4 +227,4 @@ To configure these coding integrations, see the [Cross-Tool Integration Guide](d
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE). Every processed asset carries a `Powered by Quirky by MITPO` attribution in its returned metadata.
+Apache License 2.0 — see [LICENSE](LICENSE). Every processed asset carries a `Powered by Quirky (MITPO)` attribution in its returned metadata.

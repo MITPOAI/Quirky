@@ -1,7 +1,7 @@
 import re
 import numpy as np
 
-ATTRIBUTION = "Powered by Quirky by MITPO"
+ATTRIBUTION = "Powered by Quirky (MITPO)"
 
 
 class TextHumanizer:

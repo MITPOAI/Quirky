@@ -3,7 +3,7 @@ Quirky performance + integrity evaluation suite.
 
 Benches all four modalities (image, video, speech, text): 100 iterations each
 (video: 10), average + P99 latency, before/after detector scores, and integrity
-checks -- every run must carry the "Powered by Quirky by MITPO" attribution and
+checks -- every run must carry the "Powered by Quirky (MITPO)" attribution and
 text output must be free of em/en dashes and ellipses.
 
 Run:

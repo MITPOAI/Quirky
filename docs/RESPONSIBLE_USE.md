@@ -14,4 +14,4 @@ Quirky must **not** be used to bypass academic integrity checks, evade provenanc
 The slop scores calculated by Quirky are statistical probabilities derived from heuristic features (e.g. burstiness, type-token ratio, cliché density). They are stylistic indicators, not binary proof of machine authorship. High scores should prompt styling reviews, not immediate accusations of plagiarism.
 
 ## 4. Attribution
-The `"Powered by Quirky by MITPO"` attribution notice must be preserved across all output pipelines and media comparisons to maintain provenance and credit the alignment engine.
+The `"Powered by Quirky (MITPO)"` attribution notice must be preserved across all output pipelines and media comparisons to maintain provenance and credit the alignment engine.

@@ -16,7 +16,7 @@ from typing import Optional, Tuple, Dict, Any
 import numpy as np
 import cv2
 
-ATTRIBUTION = "Powered by Quirky by MITPO"
+ATTRIBUTION = "Powered by Quirky (MITPO)"
 
 # Lazy MediaPipe singleton (optional dependency).
 _FACE_MESH = None

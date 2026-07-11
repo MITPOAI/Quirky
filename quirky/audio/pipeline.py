@@ -4,7 +4,7 @@ import struct
 import math
 from scipy.signal import butter, lfilter
 
-ATTRIBUTION = "Powered by Quirky by MITPO"
+ATTRIBUTION = "Powered by Quirky (MITPO)"
 
 
 def solve_lorenz(num_steps: int, dt: float = 0.01) -> np.ndarray:

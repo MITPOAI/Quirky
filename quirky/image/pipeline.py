@@ -32,7 +32,7 @@ def generate_fbm_2d(width: int, height: int, octaves: int = 4, lacunarity: float
     return noise / total_amplitude
 
 
-ATTRIBUTION = "Powered by Quirky by MITPO"
+ATTRIBUTION = "Powered by Quirky (MITPO)"
 
 
 def shape_noise_spectrum(noise: np.ndarray, beta: float = 1.0) -> np.ndarray:

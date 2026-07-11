@@ -25,7 +25,7 @@ from quirky.video.pipeline import VideoHumanizer
 
 mcp = FastMCP("quirky")
 
-ATTRIBUTION = "Powered by Quirky by MITPO"
+ATTRIBUTION = "Powered by Quirky (MITPO)"
 
 
 @mcp.tool()

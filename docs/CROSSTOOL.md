@@ -80,3 +80,12 @@ Configure Quirky via the following environment variables:
 * `QUIRKY_COSINE_THRESHOLD`: Cosine similarity drift guard limit (default: `0.75`).
 * `QUIRKY_HOOK_THRESHOLD`: Slop threshold at which hooks block edits (default: `0.60`).
 * `QUIRKY_HOOK_EXTS`: Comma-separated file extensions checked by hooks (default: `.md,.txt,.mdx,.rst`).
+
+---
+
+## 5. Coding Agents (Antigravity & Others)
+
+Codebase-aware agentic assistants (like **Antigravity**, Claude Code, Cursor, or Codex) do not require separate installation of agent plugins to adhere to rules:
+1. When you run `quirky init`, it places `AGENTS.md` and `.cursor/rules/quirky.mdc` in the repository.
+2. Coding agents automatically locate and parse these markdown rules and custom rules folders during workspace ingestion.
+3. Once Quirky is initialized in a repository, agents working in that directory will automatically adopt Quirky's active style guidelines (such as concise explanations and slop-free prose).
