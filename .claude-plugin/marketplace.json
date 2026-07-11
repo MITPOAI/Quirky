@@ -1,0 +1,13 @@
+{
+  "name": "quirky-marketplace",
+  "owner": {
+    "name": "MITPO"
+  },
+  "plugins": [
+    {
+      "name": "quirky",
+      "source": "./plugin",
+      "description": "Quirky active anti-slop helper. Powered by Quirky by MITPO"
+    }
+  ]
+}
