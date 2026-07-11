@@ -20,6 +20,7 @@ from quirky.detector.formulas import (
     compute_image_spectral_slope,
     compute_image_channel_correlation
 )
+from quirky.detector.calibrate import calibrated_text_score
 
 class DetectorEngine:
     @staticmethod
@@ -39,6 +40,8 @@ class DetectorEngine:
         # Default empty metadata dictionary
         scores = {
             "ai_score": 0.0,
+            "ai_probability": 0.0,
+            "score_source": "heuristic",
             "plastic_score": 0.0,
             "emotion_score": 0.0,
             "symmetry_score": 0.0,
@@ -125,6 +128,7 @@ class DetectorEngine:
                 content = f.read()
                 
             ai = compute_text_ai_score(content)
+            prob, source = calibrated_text_score(content)
             repetition = compute_text_repetition_score(content)
             leak = compute_text_prompt_leak_score(content)
             
@@ -146,6 +150,8 @@ class DetectorEngine:
             
             return {
                 "ai_score": round(ai, 3),
+                "ai_probability": round(prob, 3),
+                "score_source": source,
                 "plastic_score": round(plastic, 3),
                 "emotion_score": round(emotion, 3),
                 "symmetry_score": 0.0,
@@ -156,7 +162,10 @@ class DetectorEngine:
             }
         except Exception:
             return {
-                "ai_score": 0.5, "plastic_score": 0.5, "emotion_score": 0.5, "symmetry_score": 0.0,
+                "ai_score": 0.5,
+                "ai_probability": 0.5,
+                "score_source": "heuristic",
+                "plastic_score": 0.5, "emotion_score": 0.5, "symmetry_score": 0.0,
                 "lighting_score": 0.0, "texture_score": 0.5, "repetition_score": 0.5, "prompt_leak_score": 0.0
             }
 
