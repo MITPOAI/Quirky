@@ -166,5 +166,48 @@ def quirky_humanize_media(path: str, output_path: str | None = None, intensity: 
         return {"error": str(e), "attribution": ATTRIBUTION}
 
 
+@mcp.tool()
+def quirky_list_skills() -> Dict[str, Any]:
+    """
+    Lists the names and descriptions of all registered agent skills.
+    """
+    try:
+        from quirky.agent.core import QuirkyAgent
+        agent = QuirkyAgent()
+        return {
+            "skills": agent.list_skills(),
+            "attribution": ATTRIBUTION
+        }
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
+@mcp.tool()
+def quirky_run_agent(
+    input_data: str,
+    is_file: bool = True,
+    output_path: str | None = None,
+    intensity: float = 0.5
+) -> Dict[str, Any]:
+    """
+    Runs QuirkyAgent on the input (file path or direct text content) to sequentially
+    apply skills, analyze scores, and verify safety guards.
+    """
+    try:
+        from quirky.agent.core import QuirkyAgent
+        agent = QuirkyAgent()
+        res = agent.run(
+            input_data=input_data,
+            is_file=is_file,
+            output_path=output_path,
+            intensity=intensity
+        )
+        res["attribution"] = ATTRIBUTION
+        return res
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
 if __name__ == "__main__":
     mcp.run()
+

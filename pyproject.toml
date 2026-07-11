@@ -25,7 +25,7 @@ vision = ["mediapipe>=0.10"]
 # Neural repaint / voice-conversion plugins (ONNX Runtime + auto-downloaded,
 # commercial-safe weights). Opt-in only; the core stays weight-free without this.
 dl = [
-    "onnxruntime>=1.17",
+    "onnxruntime>=1.17,<1.20",
     "huggingface-hub>=0.23",
 ]
 agent = ["fastmcp>=3,<4"]

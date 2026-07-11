@@ -47,8 +47,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
         "task": "inpaint",
     },
     "gfpgan_face": {
-        "repo": "Xenova/gfpgan",
-        "file": "onnx/gfpgan.onnx",
+        "repo": "Meeperomi/GFPGANv1.4-onnx",
+        "file": "GFPGANv1.4.onnx",
         "license": "Apache-2.0",
         "task": "face_restore",
     },
@@ -57,6 +57,18 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
         "file": "content-vec-best.onnx",
         "license": "MIT",
         "task": "voice_content",
+    },
+    "wavlm_knnvc": {
+        "repo": "TigreGotico/voiceclonnx-knn-vc",
+        "file": "wavlm_layer6.onnx",
+        "license": "MIT",
+        "task": "voice_encoder",
+    },
+    "hifigan_knnvc": {
+        "repo": "TigreGotico/voiceclonnx-knn-vc",
+        "file": "hifigan_knnvc.onnx",
+        "license": "MIT",
+        "task": "vocoder",
     },
 }
 
@@ -144,16 +156,17 @@ def repaint(image_rgb: np.ndarray, mask: np.ndarray, model: str = "lama_inpaint"
     require_dl()
     sess = _session(model)
     h, w = image_rgb.shape[:2]
-    H, W = (h // 8) * 8, (w // 8) * 8  # LaMa needs multiple-of-8 dims
     import cv2
-    img = cv2.resize(image_rgb, (W, H)).astype(np.float32) / 255.0
-    m = (cv2.resize(mask, (W, H)) > 127).astype(np.float32)
+    img = cv2.resize(image_rgb, (512, 512)).astype(np.float32)
+    if img.max() > 1.0:
+        img = img / 255.0
+    m = (cv2.resize(mask, (512, 512)) > 127).astype(np.float32)
     img_in = np.transpose(img, (2, 0, 1))[None]
     mask_in = m[None, None]
-    ins = {i.name: v for i, v in zip(sess.get_inputs(), (img_in, mask_in))}
+    ins = {"image": img_in, "mask": mask_in}
     out = sess.run(None, ins)[0][0]
-    out = np.clip(np.transpose(out, (1, 2, 0)), 0, 1)
-    return cv2.resize((out * 255).astype(np.uint8), (w, h))
+    out = np.clip(np.transpose(out, (1, 2, 0)), 0, 255)
+    return cv2.resize(out.astype(np.uint8), (w, h))
 
 
 def restore_face(image_rgb: np.ndarray, model: str = "gfpgan_face") -> np.ndarray:
@@ -164,12 +177,17 @@ def restore_face(image_rgb: np.ndarray, model: str = "gfpgan_face") -> np.ndarra
     require_dl()
     sess = _session(model)
     import cv2
-    face = cv2.resize(image_rgb, (512, 512)).astype(np.float32) / 255.0
-    face = (face - 0.5) / 0.5  # GFPGAN normalization
-    inp = np.transpose(face, (2, 0, 1))[None]
+    face = cv2.resize(image_rgb, (512, 512)).astype(np.float32)
+    if face.max() > 1.0:
+        face = face / 255.0
+    # GFPGAN expects BGR channel ordering
+    face_bgr = cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
+    face_bgr = (face_bgr - 0.5) / 0.5  # GFPGAN normalization
+    inp = np.transpose(face_bgr, (2, 0, 1))[None]
     out = sess.run(None, {sess.get_inputs()[0].name: inp})[0][0]
     out = np.clip((np.transpose(out, (1, 2, 0)) * 0.5 + 0.5), 0, 1)
-    return cv2.resize((out * 255).astype(np.uint8), image_rgb.shape[1::-1])
+    out_rgb = cv2.cvtColor((out * 255).astype(np.uint8), cv2.COLOR_BGR2RGB)
+    return cv2.resize(out_rgb, image_rgb.shape[1::-1])
 
 
 # --------------------------------------------------------------------------- #
@@ -178,17 +196,63 @@ def restore_face(image_rgb: np.ndarray, model: str = "gfpgan_face") -> np.ndarra
 def clone_voice(src_wav: str, ref_wav: str, out_wav: str) -> Dict[str, Any]:
     """
     Zero-shot voice conversion: re-timbre the speech in `src_wav` toward the voice in
-    `ref_wav`. Pipeline (RVC / Seed-VC style): content encoder (ContentVec) extracts
-    speaker-independent linguistic content, a speaker embedding is taken from the
-    reference clip, and a vocoder resynthesizes the content in the target timbre.
-
-    This fits Quirky's post-processor identity -- it converts existing audio rather
-    than generating from text. Requires the full [dl] voice checkpoints on first run.
+    `ref_wav`. Pipeline (kNN-VC style): speaker-independent linguistic features are
+    extracted using WavLM, matched via kNN search against reference speaker features,
+    and a HiFi-GAN vocoder resynthesizes the converted features into target timbre.
     """
     require_dl()
-    raise NotImplementedError(
-        "Voice-conversion checkpoints are not bundled. To enable: register a ContentVec "
-        "encoder + HiFi-GAN vocoder ONNX (RVC-MIT or Seed-VC) and wire the 3-stage "
-        "pipeline. Framework, cache and provider selection are ready; only the "
-        "model-specific pre/post-processing per checkpoint remains."
-    )
+    
+    import librosa
+    import soundfile as sf
+    import onnxruntime as ort
+    import numpy as np
+    
+    # 1. Load both audios at 16000 Hz
+    src_audio, sr = librosa.load(src_wav, sr=16000)
+    ref_audio, _ = librosa.load(ref_wav, sr=16000)
+    
+    # 2. Load model sessions
+    wavlm_sess = _session("wavlm_knnvc")
+    hifigan_sess = _session("hifigan_knnvc")
+    
+    def extract_features(audio):
+        audio = (audio - np.mean(audio)) / (np.std(audio) + 1e-8)
+        inp = audio[None].astype(np.float32)
+        out = wavlm_sess.run(None, {"input_values": inp})[0]
+        return out[0]  # (frames, 1024)
+        
+    src_feats = extract_features(src_audio)  # (src_frames, 1024)
+    ref_feats = extract_features(ref_audio)  # (ref_frames, 1024)
+    
+    # 3. Perform kNN search (k=4)
+    s_norm = src_feats / (np.linalg.norm(src_feats, axis=1, keepdims=True) + 1e-8)
+    r_norm = ref_feats / (np.linalg.norm(ref_feats, axis=1, keepdims=True) + 1e-8)
+    
+    # cosine similarity and distance
+    sim = s_norm @ r_norm.T
+    dist = 1.0 - sim
+    
+    k = min(4, len(ref_feats))
+    indices = np.argsort(dist, axis=1)[:, :k]  # (src_frames, k)
+    
+    # Converted features: average of neighbors
+    converted_feats = np.zeros_like(src_feats)
+    for i in range(len(src_feats)):
+        idx = indices[i]
+        converted_feats[i] = np.mean(ref_feats[idx], axis=0)
+        
+    # 4. Synthesize waveform using HiFi-GAN vocoder (shape: batch, 1024, frames)
+    voc_input = np.transpose(converted_feats[None], (0, 2, 1)).astype(np.float32)
+    wav_out = hifigan_sess.run(None, {"features": voc_input})[0]
+    wav_out = wav_out[0, 0]  # (samples,)
+    
+    # Normalize and write output wav
+    wav_out = np.clip(wav_out, -1.0, 1.0)
+    sf.write(out_wav, wav_out, 16000)
+    
+    return {
+        "attribution": ATTRIBUTION,
+        "modality": "voice",
+        "output_path": out_wav,
+        "sample_rate": 16000,
+    }

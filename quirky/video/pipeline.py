@@ -27,10 +27,12 @@ class VideoHumanizer:
         video_path: str,
         output_path: str,
         intensity: float = 0.5,
-        t_row: float = 0.02
+        t_row: float = 0.02,
+        bbox: Tuple[int, int, int, int] | None = None
     ) -> None:
         """
-        Applies handheld camera drift and sub-frame rolling shutter correction to video frames.
+        Applies handheld camera drift and sub-frame rolling shutter correction to video frames,
+        with optional localized bounding box tracking.
         """
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
@@ -56,6 +58,11 @@ class VideoHumanizer:
         frame_idx = 0
         prev_gray = None
         
+        # Bounding box tracking state: [x, y, w, h]
+        cur_bbox = None
+        if bbox is not None:
+            cur_bbox = [float(c) for c in bbox]
+            
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -68,10 +75,24 @@ class VideoHumanizer:
             # Formula: y_corrected = y_raw + v_y(x, y) * (r/H * T_row)
             # Estimate velocity v_y using optical flow relative to previous frame
             v_y = np.zeros((h, w), dtype=np.float32)
+            flow = None
             if prev_gray is not None:
                 flow = cv2.calcOpticalFlowFarneback(prev_gray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
                 v_y = flow[..., 1]
                 
+            # Localized coordinate tracking update
+            if cur_bbox is not None and flow is not None:
+                bx, by, bw, bh = cur_bbox
+                x0, y0 = max(0, int(bx)), max(0, int(by))
+                x1, y1 = min(w, int(bx + bw)), min(h, int(by + bh))
+                if x1 > x0 and y1 > y0:
+                    flow_patch = flow[y0:y1, x0:x1]
+                    dx_flow = np.median(flow_patch[..., 0])
+                    dy_flow = np.median(flow_patch[..., 1])
+                    if np.isfinite(dx_flow) and np.isfinite(dy_flow):
+                        cur_bbox[0] = np.clip(bx + dx_flow, 0, w - 1)
+                        cur_bbox[1] = np.clip(by + dy_flow, 0, h - 1)
+                        
             # Apply row-by-row shift correction
             # Map coordinates
             map_x, map_y = np.meshgrid(np.arange(w), np.arange(h))
@@ -85,8 +106,22 @@ class VideoHumanizer:
             map_y_corrected = map_y + v_y * (r_fraction * t_row * intensity * 100.0)
             map_y_corrected = np.clip(map_y_corrected, 0, h - 1)
             
-            corrected_frame = cv2.remap(frame, map_x, map_y_corrected, cv2.INTER_LINEAR)
+            remapped_frame = cv2.remap(frame, map_x, map_y_corrected, cv2.INTER_LINEAR)
             
+            # Blend rolling shutter correction selectively inside the tracked region
+            if cur_bbox is not None:
+                bx, by, bw, bh = cur_bbox
+                mask = np.zeros((h, w), dtype=np.float32)
+                x0, y0 = max(0, int(bx)), max(0, int(by))
+                x1, y1 = min(w, int(bx + bw)), min(h, int(by + bh))
+                if x1 > x0 and y1 > y0:
+                    mask[y0:y1, x0:x1] = 1.0
+                mask = cv2.GaussianBlur(mask, (15, 15), 0)
+                mask_3d = mask[..., None]
+                corrected_frame = (frame * (1.0 - mask_3d) + remapped_frame * mask_3d).astype(np.uint8)
+            else:
+                corrected_frame = remapped_frame
+                
             # 2. Handheld Camera Drift Injection (Affine transform)
             # Center of frame
             center_x, center_y = w / 2.0, h / 2.0

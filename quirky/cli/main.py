@@ -278,5 +278,133 @@ def voice_clone(
     typer.secho(f"Voice-converted -> {output}", fg=typer.colors.GREEN)
 
 
+agent_app = typer.Typer(help="Manage and run Quirky agents and skills")
+
+@agent_app.command(name="list-skills")
+def agent_list_skills():
+    """
+    Lists all available agent skills.
+    """
+    from quirky.agent.core import QuirkyAgent
+    agent = QuirkyAgent()
+    skills = agent.list_skills()
+    typer.secho("Registered Quirky Agent Skills:", fg=typer.colors.CYAN, bold=True)
+    for s in skills:
+        typer.secho(f"  * {s['name']}: {s['description']}", fg=typer.colors.GREEN)
+
+@agent_app.command(name="run")
+def agent_run(
+    asset: str = typer.Option(..., "--asset", "-a", help="Path to the synthetic asset or text file to optimize"),
+    output: str = typer.Option(None, "--output", "-o", help="Path to save the optimized result"),
+    intensity: int = typer.Option(50, "--intensity", "-i", min=0, max=100, help="Optimization intensity (0-100)")
+):
+    """
+    Runs QuirkyAgent on the specified asset.
+    """
+    try:
+        from quirky.agent.core import QuirkyAgent
+        if not os.path.exists(asset):
+            typer.secho(f"Error: Asset file '{asset}' does not exist.", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        typer.secho(f"Initializing QuirkyAgent for {asset}...", fg=typer.colors.CYAN)
+        agent = QuirkyAgent()
+        result = agent.run(
+            input_data=asset,
+            is_file=True,
+            output_path=output,
+            intensity=intensity / 100.0
+        )
+        
+        # Display logs
+        typer.secho("\nAgent Execution Audit Log:", fg=typer.colors.CYAN, bold=True)
+        for log in result.get("logs", []):
+            typer.secho(f"  {log}", fg=typer.colors.WHITE)
+            
+        if result["status"] == "success":
+            typer.secho("\nSuccess!", fg=typer.colors.GREEN, bold=True)
+            typer.secho(f"Original AI Score: {result['original_score']}", fg=typer.colors.YELLOW)
+            typer.secho(f"Final AI Score:    {result['final_score']}", fg=typer.colors.GREEN)
+            if "output_path" in result:
+                typer.secho(f"Saved to:          {result['output_path']}", fg=typer.colors.GREEN)
+        else:
+            typer.secho(f"\nFailure: {result.get('error')}", fg=typer.colors.RED, bold=True)
+            raise typer.Exit(1)
+            
+    except Exception as e:
+        typer.secho(f"Execution Error: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+def find_git_dir(start_path: str = ".") -> str | None:
+    curr = os.path.abspath(start_path)
+    while True:
+        git_dir = os.path.join(curr, ".git")
+        if os.path.isdir(git_dir):
+            return git_dir
+        parent = os.path.dirname(curr)
+        if parent == curr:
+            break
+        curr = parent
+    return None
+
+
+@agent_app.command(name="install-hook")
+def agent_install_hook():
+    """
+    Installs a Git pre-commit hook that automatically runs QuirkyAgent on staged files.
+    """
+    try:
+        git_dir = find_git_dir()
+        if not git_dir:
+            typer.secho("Error: No .git directory found. Run this in a Git repo.", fg=typer.colors.RED)
+            raise typer.Exit(1)
+            
+        hooks_dir = os.path.join(git_dir, "hooks")
+        os.makedirs(hooks_dir, exist_ok=True)
+        hook_path = os.path.join(hooks_dir, "pre-commit")
+        
+        script_content = """#!/bin/sh
+# Quirky Anti-Slop Git Pre-Commit Hook
+# Automatically cleans and humanizes staged text and source files before committing.
+
+# Get list of staged files (Added, Copied, Modified)
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+
+for file in $staged_files; do
+  if [ -f "$file" ]; then
+    ext="${file##*.}"
+    ext_lower=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+    
+    if [ "$ext_lower" = "md" ] || [ "$ext_lower" = "txt" ] || [ "$ext_lower" = "py" ] || [ "$ext_lower" = "js" ] || [ "$ext_lower" = "ts" ]; then
+      echo "Quirky: Cleaning slop from staged file: $file"
+      quirky agent run --asset "$file" --output "$file" --intensity 50
+      git add "$file"
+    fi
+  fi
+done
+
+exit 0
+"""
+        with open(hook_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+            
+        try:
+            os.chmod(hook_path, 0o755)
+        except Exception:
+            pass
+            
+        typer.secho(f"Success! Git pre-commit hook installed at {hook_path}", fg=typer.colors.GREEN)
+        typer.secho("Staged files (.md, .txt, .py, .js, .ts) will now be automatically humanized on commit.", fg=typer.colors.GREEN)
+    except Exception as e:
+        typer.secho(f"Error installing hook: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+app.add_typer(agent_app, name="agent")
+
+
 if __name__ == "__main__":
     app()
+
+

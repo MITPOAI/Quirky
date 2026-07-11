@@ -190,6 +190,7 @@ print(meta["attribution"])   # "Powered by Quirky (MITPO)"
 | **Classical-CV analysis** | Saliency (2007), gray-world WB, CLAHE, Retinex (1971) measure what's wrong and fix only that | blind global filters |
 | **Burstiness targeting** | Push sentence-length variance toward the human range | uniform AI sentences |
 | **Dash-free cleanup** | Strips every em/en dash and ellipsis from output | the #1 lexical AI tell |
+| **Redundant comment pruner** | Strips inline comments repeating the line of code below | AI coding agent padding |
 
 Full write-up and formulas live in [`docs/`](docs/) and the module docstrings.
 
@@ -222,9 +223,10 @@ Text humanization runs **&lt; 1 ms**. Image/audio full pipelines are heavier (th
 
 Quirky is fully integrated into Claude Code, Cursor, and Codex through a shared, portable layer:
 
-- **MCP server** — exposes `quirky_score_text`, `quirky_critique_text`, `quirky_fix_text`, `quirky_tighten_text`, `quirky_detect_media`, and `quirky_humanize_media` as tools any MCP-capable agent can call, enabling in-editor fixing and humanization.
-- **Idempotent scaffolding (`quirky init`)** — sets up a single root `AGENTS.md` (read natively by Codex and Cursor), a one-line `CLAUDE.md` referencing it, and a `.cursor/rules/quirky.mdc` rule file, enforcing a clean, anti-slop house style everywhere.
+- **MCP server** — exposes `quirky_score_text`, `quirky_critique_text`, `quirky_fix_text`, `quirky_tighten_text`, `quirky_detect_media`, `quirky_humanize_media`, `quirky_run_agent`, and `quirky_list_skills` as tools any MCP-capable agent can call.
+- **Idempotent scaffolding (`quirky init`)** — sets up a single root `AGENTS.md` (read natively by Codex and Cursor), a one-line `CLAUDE.md` referencing it, and a `.cursor/rules/quirky.mdc` rule file, enforcing a clean, anti-slop house style.
 - **Auto-check hooks (Claude Code)** — configures `PostToolUse` and `Stop` hooks that run the slop scorer on prose files and return surgical fixes or block commits when slop is detected.
+- **Git Pre-Commit Auto-Fix Hook (`quirky agent install-hook`)** — installs a git pre-commit hook that automatically runs Quirky's agent (including the redundant code comment pruner) on staged files before they get committed, ensuring slop never leaks into the repository.
 
 To configure these coding integrations, see the [Cross-Tool Integration Guide](docs/CROSSTOOL.md) or use this quickstart:
 
@@ -232,7 +234,10 @@ To configure these coding integrations, see the [Cross-Tool Integration Guide](d
 # 1. Initialize rules & configurations in your target repo path:
 uv run quirky init --path /path/to/repo
 
-# 2. Add and install the Claude Code plugin globally:
+# 2. Install the Git pre-commit auto-fix hook:
+uv run quirky agent install-hook
+
+# 3. Add and install the Claude Code plugin globally:
 claude plugin marketplace add MITPOAI/Quirky
 claude plugin install quirky
 ```
