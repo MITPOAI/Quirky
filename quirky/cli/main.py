@@ -200,6 +200,33 @@ def serve(
     start_server(host=host, port=port)
 
 
+@app.command()
+def init(
+    path: str = typer.Option(".", "--path", "-p", help="Target repository directory to initialize"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force overwrite existing files even if they lack markers")
+):
+    """
+    Scaffolds active anti-slop guidelines and MCP server configurations into the target repository.
+    """
+    try:
+        from quirky.cli.scaffold import init_repo
+        typer.secho(f"Initializing Quirky cross-tool rules in target repo '{path}'...", fg=typer.colors.CYAN)
+        res = init_repo(path, force=force)
+        for name, status in res.items():
+            if status == "created":
+                fg_color = typer.colors.GREEN
+            elif status == "updated":
+                fg_color = typer.colors.YELLOW
+            else:
+                fg_color = typer.colors.WHITE
+            typer.secho(f"  [{status.upper()}] {name}", fg=fg_color)
+        typer.secho("Success! Quirky cross-tool scaffolding completed.", fg=typer.colors.GREEN)
+    except Exception as e:
+        typer.secho(f"Scaffolding Error: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+
 def _run_dl(fn_name: str, *args):
     """Run a quirky.plugins.dl function, surfacing a clean install hint if the extra is missing."""
     from quirky.plugins import dl
