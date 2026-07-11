@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'QUIRKY ANTI-SLOP ACTIVE. On prose (.md/.txt/.mdx/.rst): cut AI cliches (furthermore, moreover, leverage, utilize, facilitate, robust, seamless, cutting-edge, state-of-the-art). No em/en dashes or ellipses. Prefer contractions. Strip hedges and fillers. Fix slop, do not pad. Never change code, commands, or numbers. Use quirky_score_text then quirky_fix_text when available.'",
+            "timeout": 5,
+            "statusMessage": "Loading quirky anti-slop rules"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
