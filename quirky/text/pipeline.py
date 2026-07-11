@@ -44,6 +44,14 @@ class TextHumanizer:
         r"\bThey are\b": "They're",
         r"\bwould not\b": "wouldn't",
         r"\bI am\b": "I'm",
+        r"\bthat is\b": "that's",
+        r"\bThat is\b": "That's",
+        r"\bthere is\b": "there's",
+        r"\bThere is\b": "There's",
+        r"\byou are\b": "you're",
+        r"\bYou are\b": "You're",
+        r"\bdoes not\b": "doesn't",
+        r"\bwill not\b": "won't",
     }
     
     CONVERSATIONAL_INJECTORS = [
@@ -205,7 +213,7 @@ class TextHumanizer:
             # Merge a short sentence with the next into one longer clause
             if wc < 9 and j + 1 < len(sents) and np.random.rand() < intensity:
                 s2, d2 = sents[j + 1]
-                joiner = np.random.choice([" — ", ", and ", ", "])
+                joiner = np.random.choice([", and ", ", so ", ", "])
                 tail = (s2[0].lower() + s2[1:]) if s2 else s2
                 out.append(f"{s.rstrip('.')}{joiner}{tail}{d2}")
                 j += 2
@@ -219,18 +227,42 @@ class TextHumanizer:
     @staticmethod
     def diversify_punctuation(text: str, intensity: float = 0.5) -> str:
         """
-        Humans use dashes, ellipses and parentheticals far more than AI, which is
-        trained toward grammatical completeness. Swap a small fraction of commas for
-        em-dashes / ellipses at a controlled, intensity-scaled rate.
+        Vary punctuation rhythm WITHOUT the em-dash/ellipsis crutch (the em-dash is
+        itself a notorious AI tell). Occasionally promote a ", and/but/so" clause to a
+        fresh short sentence starting with the connector, the way people talk.
         """
-        def _repl(_m):
-            r = np.random.rand()
-            if r < 0.10 * intensity:
-                return " —"
-            if r < 0.15 * intensity:
-                return " …"
-            return ","
-        return re.sub(r',', _repl, text)
+        def _promote(m):
+            if np.random.rand() < 0.25 * intensity:
+                return ". " + m.group(1).capitalize() + " "
+            return m.group(0)
+        return re.sub(r',\s+(and|but|so)\s+', _promote, text)
+
+    @staticmethod
+    def strip_ai_punctuation(text: str) -> str:
+        """
+        Final cleanup pass: remove ALL em/en dashes and ellipses, normalize curly
+        quotes. Dash between clauses becomes a comma; a spaced dash acting as a full
+        stop becomes a period when the next word is capitalized.
+        """
+        # em/en dash between space-separated clauses
+        def _dash(m):
+            after = m.group(1)
+            if after[:1].isupper():
+                return ". " + after
+            return ", " + after
+        text = re.sub(r'\s+[—–-]{1,2}\s+(\S)', lambda m: _dash(m), text)
+        # any survivors (word—word, stray dashes)
+        text = text.replace("—", ", ").replace("–", ", ")
+        # ellipses (unicode + triple-dot) -> period
+        text = re.sub(r'(\.{3,}|…)\s*', '. ', text)
+        # curly quotes -> straight
+        text = (text.replace("“", '"').replace("”", '"')
+                    .replace("‘", "'").replace("’", "'"))
+        # tidy doubled punctuation/spaces created by the replacements
+        text = re.sub(r'\s+([,.!?])', r'\1', text)
+        text = re.sub(r',\s*,', ', ', text)
+        text = re.sub(r'\.\s*\.', '. ', text)
+        return re.sub(r'\s{2,}', ' ', text).strip()
 
     @staticmethod
     def humanize(text: str, intensity: float = 0.5) -> str:
@@ -320,5 +352,8 @@ class TextHumanizer:
         # Clean double spaces and punctuation issues
         output = re.sub(r'\s+', ' ', output)
         output = re.sub(r'\s+([.!?])', r'\1', output)
+
+        # 5. Guarantee dash-free, ellipsis-free, straight-quoted output
+        output = TextHumanizer.strip_ai_punctuation(output)
 
         return output

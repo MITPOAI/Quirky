@@ -52,30 +52,33 @@ Your generator  ──►  Quirky (local math)  ──►  Humanized output
 
 ## Before / After
 
-Run on a fresh AI-slop sample (smooth, symmetric, over-blurred — the classic diffusion look). Numbers are the **passive detector scores** before vs. after a single local pass. Lower `ai_score`/`plastic_score` and a `spectral_slope` closer to the natural **−2** mean *more human*.
+Run on fresh AI-slop samples (smooth, symmetric, cold-cast, over-blurred image; metronomic formant speech; rigid linear-motion video; boilerplate LLM text). Numbers are the **passive detector scores** before vs. after a single local pass. Lower `ai_score`/`plastic_score` and a `spectral_slope` closer to the natural **−2** mean *more human*.
 
 <p align="center">
   <img src="assets/quirky-benchmark.png" alt="Quirky before/after comparison card" width="80%" />
 </p>
 
-**Image** (`intensity 65`)
+**Image** (`intensity 60`) — the engine first *analyzes* the image with classical CV and applied exactly what this sample needed: `white_balance 0.32` (caught the cold-blue cast), `clahe_lighting 0.36` (caught the flat lighting), plus grain/spectrum/color physics:
 
 | Metric | Before (AI slop) | After (Quirky) | Direction |
 | --- | ---: | ---: | :---: |
-| `ai_score` | 0.216 | **0.110** | ↓ better |
-| `plastic_score` | 0.990 | **0.933** | ↓ better |
-| `texture_score` | 0.524 | **0.770** | ↑ better |
-| `spectral_slope` (natural ≈ −2) | −3.60 | **−2.34** | → natural |
-| `channel_corr` (camera-like) | 0.072 | **0.428** | ↑ better |
+| `ai_score` | 0.289 | **0.112** | ↓ better |
+| `plastic_score` | 0.990 | **0.947** | ↓ better |
+| `spectral_slope` (natural ≈ −2) | −3.57 | **−2.52** | → natural |
+| `channel_corr` (camera-like) | 0.074 | **0.430** | ↑ better |
 
-**Text**
+**Text** — output is guaranteed free of em/en dashes and ellipses (the classic AI tells):
 
 | | Sample | `ai_score` |
 | --- | --- | ---: |
 | **Before** | *"Furthermore, it is important to note that this approach facilitates optimization. Moreover, one must utilize structured systems…"* | 0.99 |
-| **After** | *"Plus, honestly, this is how you actually make it run faster. On top of that, one must use structured systems…"* | **0.57** |
+| **After** | *"Plus, honestly, this is how you actually make it run faster. On top of that, one must use structured systems…"* | **0.60** |
 
-> Reproduce it yourself: [`quirky/benchmarks/eval_suite.py`](quirky/benchmarks/eval_suite.py) and the commands below.
+**Speech** — pitch-period jitter/shimmer, downward intonation drift, phrase-final lengthening, and occasional micro-pauses are inserted; verify by ear or with the eval suite (the crude envelope metrics saturate on synthetic tones).
+
+**Video** — handheld camera drift + rolling-shutter correction applied frame-by-frame; all 40/40 frames preserved. (Frame-wise detector scores barely move by design — the humanization here is *motion*, not per-frame texture.)
+
+> Reproduce everything: `uv run python quirky/benchmarks/eval_suite.py`
 
 ---
 
@@ -85,8 +88,10 @@ No API key. No GPU. No downloads of model weights. It runs entirely on your mach
 
 ```bash
 # 1. Install (uses uv — https://github.com/astral-sh/uv)
-git clone https://github.com/mitpo/quirky.git && cd quirky
+git clone https://github.com/MITPOAI/Quirky.git && cd Quirky
 uv venv && uv pip install -e .
+# optional power-ups:  uv pip install -e ".[vision]"   (face targeting)
+#                      uv pip install -e ".[dl]"       (neural upscale/repaint/voice)
 
 # 2. Score any asset (passive — never edits it)
 uv run quirky detect --asset sample.png
@@ -102,22 +107,52 @@ Works on images (`.png/.jpg/.webp`), audio (`.wav`), and text (`.txt/.md`).
 
 ## Do I need an API or another AI model?
 
-**No.** This is the point of the project:
+**No — the core needs nothing but Python.** This is the point of the project:
 
 - ❌ No OpenAI / Anthropic / any generation API.
-- ❌ No GPU, CUDA, or downloaded model weights (no SAM2 / diffusion / transformers at runtime).
-- ✅ 100% local math on NumPy / SciPy / OpenCV / librosa.
+- ❌ No GPU, CUDA, or model weights in the **core** (no SAM2 / diffusion / transformers).
+- ✅ 100% local math + classical CV on NumPy / SciPy / OpenCV / librosa.
 - ✅ Your media never leaves your machine — zero data leak.
 
-Quirky **does not generate** media. It **post-processes** media you already have.
+Quirky **post-processes** media you already have. Two **opt-in** power-ups exist for
+people who want more, and neither touches the core:
+
+| Extra | Adds | Weights |
+| --- | --- | --- |
+| `pip install quirky[vision]` | Precise **face targeting** (MediaPipe FaceMesh) for spot-removal & relighting | ~10 MB, CPU |
+| `pip install quirky[dl]` | Neural **upscale / repaint / face-restore** + **voice cloning** (ONNX Runtime) | downloaded on first use, cached locally |
+
+Without the extras, the classical touch-up (below) still runs, fully offline.
+
+## Touch-up & restoration
+
+Beyond adding grain, Quirky does real, content-aware repair — and it **decides what to
+fix by measuring the image first** (classical CV, no learning):
+
+- **Spot / blemish removal** — morphology finds stray specks and over-rendered pores; `cv2.inpaint` reconstructs them from surrounding pixels (not a blur). Core, offline.
+- **Physical relighting** — splits luminance into illumination vs. reflectance (Retinex), compresses flat HDR glow, re-injects micro-shadow. Core, offline.
+- **Face targeting** — with `quirky[vision]`, MediaPipe FaceMesh scopes the fixes to the actual face; without it, a skin+saliency mask is used instead.
+- **Neural power-ups** — with `quirky[dl]`: `quirky upscale` (Real-ESRGAN), `quirky repaint` (LaMa inpaint), face restore (GFPGAN), and `quirky voice-clone` (zero-shot voice conversion — re-timbre existing audio toward a reference voice). CPU by default, CUDA if present, commercial-safe checkpoints only.
+
+```bash
+# classical, no extras:
+uv run quirky humanize -a portrait.png -o clean.png -i 60   # spot-removal + relight included
+
+# with the neural extra:
+uv pip install -e ".[dl]"
+uv run quirky upscale     -a small.png  -o big.png
+uv run quirky voice-clone -a speech.wav -r target_voice.wav -o cloned.wav
+```
+
+> Honest status: the `[dl]` framework (ONNX runtime, model registry, download/cache, CPU/CUDA selection) is functional and `upscale` is implemented end-to-end; `repaint` / face-restore / `voice-clone` are wired to the registry and pull their checkpoints on first run. Verify each model's license before shipping commercially — the registry pins Apache/MIT/BSD only.
 
 ## Web dashboard (optional)
 
 A local FastAPI + static dashboard with upload, intensity sliders, and a before/after slider.
 
 ```bash
-uv run python -m quirky.api.main
-# open http://127.0.0.1:8000
+uv run quirky serve
+# open http://127.0.0.1:8000   (custom: quirky serve --host 0.0.0.0 --port 9000)
 ```
 
 ## Use it as a library
@@ -142,7 +177,10 @@ print(meta["attribution"])   # "Powered by Quirky by MITPO"
 | **Bayer demosaic round-trip** | Re-imprints camera cross-channel color correlation | (missing entirely) |
 | **Pitch-period jitter/shimmer** | Human-range ±0.5–1% / ±3–5% via light `librosa` F0 | robotic steady pitch |
 | **Pink-noise micro-prosody** | 1/f drift of pitch and loudness + drifting glottal tilt | static delivery |
+| **Intonation & pauses** | F0 declination, phrase-final lengthening, micro-pauses | metronomic TTS timing |
+| **Classical-CV analysis** | Saliency (2007), gray-world WB, CLAHE, Retinex (1971) measure what's wrong and fix only that | blind global filters |
 | **Burstiness targeting** | Push sentence-length variance toward the human range | uniform AI sentences |
+| **Dash-free cleanup** | Strips every em/en dash and ellipsis from output | the #1 lexical AI tell |
 
 Full write-up and formulas live in [`docs/`](docs/) and the module docstrings.
 
@@ -171,9 +209,15 @@ uv run python quirky/benchmarks/bench.py        # detector statistics
 
 Text humanization runs **&lt; 1 ms**. Image/audio full pipelines are heavier (the image path includes a bilateral-filter restoration stage; audio includes `librosa` F0) — see the eval-suite notes for the isolated-transform timings and how to amortize F0 for strict latency.
 
-## Wire into Claude Code (roadmap)
+## Wire into your coding agent (roadmap)
 
-Quirky can ship as a **Claude Code plugin** via an MCP server that exposes `detect` / `humanize` / `compare` as tools (the same way other plugins bundle an MCP server). It is not a chat-mode hook plugin like some others — it's a media-processing backend — so the plugin form is MCP, not a `UserPromptSubmit` hook. Not shipped yet; contributions welcome.
+Quirky is built to plug into whatever agent you already use — Claude Code, Cursor, or Codex — through one shared, portable layer:
+
+- **MCP server** exposing `score` / `critique` / `humanize` / `rewrite` as tools any MCP-capable agent can call, so the *fixing* happens in-editor, not just the scoring.
+- **Portable operating rules** — a single root `AGENTS.md` (read natively by Codex and Cursor) plus a one-line `CLAUDE.md` that `@AGENTS.md`-imports it, so Quirky's "terse, no-slop" house style applies everywhere at once.
+- **Auto-check hook** (Claude Code) that runs the slop gate when the agent finishes writing marketing/creative text and feeds the flagged spans back for a surgical fix.
+
+Not shipped yet; this is the active roadmap and contributions are welcome. The pure-math core above already works standalone today via the CLI and the local web dashboard.
 
 ## Contributing
 

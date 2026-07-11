@@ -1,240 +1,108 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quirky Human Preference Engine</title>
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="index.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quirky Human Preference Engine</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231e2947'/%3E%3Cellipse cx='16' cy='13' rx='8' ry='6' fill='%23f5f0e4'/%3E%3Cpath d='M8 13a8 6 0 0116 0z' fill='%23262a2e'/%3E%3Ccircle cx='13' cy='9' r='2' fill='%23fff'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="index.css?v=3" />
 </head>
 <body>
-    <div class="glow-bg"></div>
-    <div class="glow-bg-secondary"></div>
+  <header class="hdr">
+    <img class="hdr-banner" src="quirky-banner.png" alt="Quirky" />
+    <span class="hdr-by">by MITPO</span>
+  </header>
 
-    <header class="app-header">
-        <div class="header-logo">
-            <span class="logo-text">QUIRKY</span>
-            <span class="badge">HUMAN PREFERENCE ENGINE</span>
+  <nav class="modal-nav" id="modal-nav">
+    <button class="mtab active" data-mod="image">🖼 Image</button>
+    <button class="mtab" data-mod="video">🎬 Video</button>
+    <button class="mtab" data-mod="speech">🎙 Speech</button>
+    <button class="mtab" data-mod="text">📝 Text</button>
+  </nav>
+
+  <main class="work">
+    <!-- LEFT: input + controls -->
+    <section class="card input-card">
+      <h1 class="card-title" id="mod-title">Image</h1>
+      <p class="card-sub" id="mod-hint">Drop an AI image. Quirky restores grain, natural spectrum, and camera color.</p>
+
+      <div class="drop" id="drop">
+        <input type="file" id="file" hidden />
+        <div class="drop-in">
+          <div class="drop-ico">⬆</div>
+          <p class="drop-t">Drag &amp; drop, or <span class="lnk">browse</span></p>
+          <p class="drop-x" id="accept-hint">PNG · JPG · WEBP</p>
         </div>
-        <div class="parent-brand">by MITPO</div>
-    </header>
+      </div>
 
-    <main class="dashboard-container">
-        <!-- Input & Controls Section -->
-        <section class="panel controls-panel">
-            <h1 class="panel-title">Asset Alignment Panel</h1>
-            <p class="panel-subtitle">Upload synthetic assets to analyze spectral anomalies and restore human textures.</p>
+      <textarea class="text-in" id="text-in" placeholder="…or paste AI text here to humanize" hidden></textarea>
 
-            <!-- Drop Zone -->
-            <div class="drop-zone" id="drop-zone">
-                <input type="file" id="file-input" accept="image/*,audio/wav,text/plain" style="display: none;">
-                <div class="drop-zone-content">
-                    <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    <p class="upload-text">Drag & drop your asset here or <span class="browse-link">browse</span></p>
-                    <p class="upload-info">Supports PNG, JPG, WEBP, WAV, TXT</p>
-                </div>
-            </div>
+      <div class="file-chip" id="chip" hidden>
+        <span id="chip-name">file</span>
+        <button id="chip-x" aria-label="remove">&times;</button>
+      </div>
 
-            <!-- Active File Info -->
-            <div class="file-info-bar" id="file-info" style="display: none;">
-                <div class="file-details">
-                    <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span id="file-name">filename.png</span>
-                </div>
-                <button class="remove-btn" id="remove-file-btn">&times;</button>
-            </div>
+      <div class="ctrls">
+        <div class="ctrl">
+          <div class="ctrl-top"><label>Intensity</label><span id="intensity-v">60%</span></div>
+          <input type="range" id="intensity" min="0" max="100" value="60" />
+        </div>
+        <div class="ctrl img-only">
+          <div class="ctrl-top"><label>Pore / Skin blend</label><span id="gamma-v">60%</span></div>
+          <input type="range" id="gamma" min="0" max="100" value="60" />
+        </div>
+        <div class="ctrl img-only">
+          <div class="ctrl-top"><label>Grain</label><span id="delta-v">3%</span></div>
+          <input type="range" id="delta" min="0" max="10" value="3" />
+        </div>
+      </div>
 
-            <!-- Parameters -->
-            <div class="parameters-section">
-                <h3 class="section-title">Humanization Weights</h3>
-                
-                <div class="slider-group">
-                    <div class="slider-header">
-                        <label for="intensity-slider">Global Intensity (δ)</label>
-                        <span class="slider-value" id="intensity-val">50%</span>
-                    </div>
-                    <input type="range" id="intensity-slider" min="0" max="100" value="50">
-                    <div class="slider-desc">Controls multi-scale procedural noise overlays and general correction strength.</div>
-                </div>
+      <button class="go" id="go" disabled>Humanize</button>
+    </section>
 
-                <div class="slider-group image-only">
-                    <div class="slider-header">
-                        <label for="gamma-slider">Pore vs Skin Blend (γ)</label>
-                        <span class="slider-value" id="gamma-val">60%</span>
-                    </div>
-                    <input type="range" id="gamma-slider" min="0" max="100" value="60">
-                    <div class="slider-desc">Blends micro-textures (CodeFormer) with skin-smoothing (GFPGAN).</div>
-                </div>
+    <!-- RIGHT: result -->
+    <section class="card out-card">
+      <div class="state empty" id="empty">
+        <div class="empty-ico">◐</div>
+        <h3>Nothing loaded yet</h3>
+        <p>Add a file on the left and hit <b>Humanize</b> to see before / after and the detector scores.</p>
+      </div>
 
-                <div class="slider-group image-only">
-                    <div class="slider-header">
-                        <label for="delta-slider">Noise Amplitude (δ_grain)</label>
-                        <span class="slider-value" id="delta-val">3%</span>
-                    </div>
-                    <input type="range" id="delta-slider" min="0" max="10" value="3">
-                    <div class="slider-desc">Amplitude of the luminance-weighted film grain overlay.</div>
-                </div>
-            </div>
+      <div class="state busy" id="busy" hidden>
+        <div class="spin"></div>
+        <p id="busy-t">Processing…</p>
+      </div>
 
-            <button class="action-btn" id="process-btn" disabled>
-                <span>Align Asset</span>
-                <div class="btn-glow"></div>
-            </button>
-        </section>
+      <div class="state result" id="result" hidden>
+        <!-- image slider -->
+        <div class="cmp img-cmp" id="img-cmp" hidden>
+          <div class="cmp-before"><img id="img-b" alt="before" /><span class="tag t-before">BEFORE</span></div>
+          <div class="cmp-after" id="img-after-wrap"><img id="img-a" alt="after" /><span class="tag t-after">AFTER</span></div>
+          <div class="cmp-handle" id="handle"></div>
+        </div>
+        <!-- media pairs -->
+        <div class="cmp media-cmp" id="video-cmp" hidden>
+          <div class="media-col"><h4>BEFORE</h4><video id="vid-b" controls></video></div>
+          <div class="media-col"><h4>AFTER</h4><video id="vid-a" controls></video></div>
+        </div>
+        <div class="cmp media-cmp" id="speech-cmp" hidden>
+          <div class="media-col"><h4>BEFORE</h4><audio id="aud-b" controls></audio></div>
+          <div class="media-col"><h4>AFTER</h4><audio id="aud-a" controls></audio></div>
+        </div>
+        <div class="cmp text-cmp" id="text-cmp" hidden>
+          <div class="text-col"><h4>BEFORE</h4><div class="text-box" id="txt-b"></div></div>
+          <div class="text-col"><h4>AFTER</h4><div class="text-box" id="txt-a"></div></div>
+        </div>
 
-        <!-- Visualization / Output Section -->
-        <section class="panel output-panel">
-            <!-- Blank State -->
-            <div class="blank-state" id="blank-state">
-                <svg class="blank-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                <h3>Awaiting Alignment Input</h3>
-                <p>Upload a synthetic file and click 'Align Asset' to view metrics analysis and the humanized restoration.</p>
-            </div>
+        <div class="metrics" id="metrics">
+          <h4 class="metrics-h">Detector — after</h4>
+          <div class="mrows" id="mrows"></div>
+        </div>
+      </div>
+    </section>
+  </main>
 
-            <!-- Loading State -->
-            <div class="loading-state" id="loading-state" style="display: none;">
-                <div class="spinner"></div>
-                <p class="loading-status" id="loading-status">Analyzing spectral patterns...</p>
-                <div class="progress-bar-container">
-                    <div class="progress-bar" id="progress-bar"></div>
-                </div>
-            </div>
-
-            <!-- Output Workspace -->
-            <div class="output-workspace" id="output-workspace" style="display: none;">
-                <div class="workspace-tabs">
-                    <button class="tab-btn active" data-tab="comparison">Comparison Slider</button>
-                    <button class="tab-btn" data-tab="metrics">Detector Analysis</button>
-                </div>
-
-                <!-- Tab 1: Comparison Slider -->
-                <div class="tab-content" id="tab-comparison">
-                    <!-- Image Comparison Slider -->
-                    <div class="comparison-slider-container" id="image-slider-container" style="display: none;">
-                        <div class="before-image-layer">
-                            <img src="" id="img-before" alt="Before">
-                            <div class="label-badge before-badge">BEFORE (Plastic AI)</div>
-                        </div>
-                        <div class="after-image-layer" id="after-layer">
-                            <img src="" id="img-after" alt="After">
-                            <div class="label-badge after-badge">AFTER (Aligned Human)</div>
-                        </div>
-                        <div class="slider-handle" id="slider-handle">
-                            <div class="handle-arrow left">◀</div>
-                            <div class="handle-line"></div>
-                            <div class="handle-button"></div>
-                            <div class="handle-arrow right">▶</div>
-                        </div>
-                    </div>
-
-                    <!-- Text Comparison Display -->
-                    <div class="text-comparison-container" id="text-comparison" style="display: none;">
-                        <div class="text-block before-text-block">
-                            <h4>BEFORE (Synthetic Standard)</h4>
-                            <div class="text-content-scroll" id="txt-before"></div>
-                        </div>
-                        <div class="text-block after-text-block">
-                            <h4>AFTER (Quirky Processed)</h4>
-                            <div class="text-content-scroll" id="txt-after"></div>
-                        </div>
-                    </div>
-
-                    <!-- Audio Comparison Display -->
-                    <div class="audio-comparison-container" id="audio-comparison" style="display: none;">
-                        <div class="audio-player-card">
-                            <h4>BEFORE (Synthetic Speech)</h4>
-                            <audio id="audio-before" controls></audio>
-                        </div>
-                        <div class="audio-player-card">
-                            <h4>AFTER (Prosody Restored)</h4>
-                            <audio id="audio-after" controls></audio>
-                        </div>
-                    </div>
-
-                    <!-- Download Share Card Button -->
-                    <div class="download-bar">
-                        <button class="download-card-btn" id="download-card-btn">
-                            <svg class="download-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                            Generate Social Share Card
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Tab 2: Detector Analysis -->
-                <div class="tab-content" id="tab-metrics" style="display: none;">
-                    <div class="metrics-dashboard">
-                        <div class="ai-score-donut">
-                            <div class="donut-circle">
-                                <span class="donut-val" id="meta-ai-score">89%</span>
-                                <span class="donut-label">AI Signature Probability</span>
-                            </div>
-                        </div>
-                        
-                        <div class="metrics-grid">
-                            <div class="metric-progress-item">
-                                <div class="metric-info">
-                                    <span>Plastic Score</span>
-                                    <span id="meta-plastic-val">78%</span>
-                                </div>
-                                <div class="metric-track"><div class="metric-fill" id="meta-plastic-fill"></div></div>
-                            </div>
-                            <div class="metric-progress-item">
-                                <div class="metric-info">
-                                    <span>Emotion Variance</span>
-                                    <span id="meta-emotion-val">12%</span>
-                                </div>
-                                <div class="metric-track"><div class="metric-fill" id="meta-emotion-fill"></div></div>
-                            </div>
-                            <div class="metric-progress-item">
-                                <div class="metric-info">
-                                    <span>Bilateral Symmetry</span>
-                                    <span id="meta-symmetry-val">94%</span>
-                                </div>
-                                <div class="metric-track"><div class="metric-fill" id="meta-symmetry-fill"></div></div>
-                            </div>
-                            <div class="metric-progress-item">
-                                <div class="metric-info">
-                                    <span>Lighting Anomalies</span>
-                                    <span id="meta-lighting-val">88%</span>
-                                </div>
-                                <div class="metric-track"><div class="metric-fill" id="meta-lighting-fill"></div></div>
-                            </div>
-                            <div class="metric-progress-item">
-                                <div class="metric-info">
-                                    <span>Texture Uniformity</span>
-                                    <span id="meta-texture-val">21%</span>
-                                </div>
-                                <div class="metric-track"><div class="metric-fill" id="meta-texture-fill"></div></div>
-                            </div>
-                            <div class="metric-progress-item">
-                                <div class="metric-info">
-                                    <span>Repetition Index</span>
-                                    <span id="meta-repetition-val">65%</span>
-                                </div>
-                                <div class="metric-track"><div class="metric-fill" id="meta-repetition-fill"></div></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <footer class="app-footer">
-        <p>Unified Alignment Layer Platform &copy; 2026 MITPO. All rights reserved.</p>
-    </footer>
-
-    <script src="index.js"></script>
+  <footer class="ftr">Quirky · local math &amp; physics · © 2026 MITPO</footer>
+  <script src="index.js?v=3"></script>
 </body>
 </html>

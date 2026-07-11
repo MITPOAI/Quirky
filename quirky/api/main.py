@@ -123,8 +123,10 @@ os.makedirs(web_dir, exist_ok=True)
 # Mount web folder statically
 app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
 
-def start_server():
-    uvicorn.run("quirky.api.main:app", host="127.0.0.1", port=8000, reload=True)
+def start_server(host: str = "127.0.0.1", port: int = 8000):
+    # reload=False: the auto-reload watcher spawns a subprocess and is brittle for
+    # end users (esp. Windows); developers can run uvicorn --reload directly.
+    uvicorn.run("quirky.api.main:app", host=host, port=port, reload=False)
 
 if __name__ == "__main__":
     start_server()

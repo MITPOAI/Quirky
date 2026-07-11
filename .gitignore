@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Quirky runtime / generated assets (NOT tracked)
+temp_assets/
+demo_assets/
+benchmark_assets/
+eval_tmp/
+*.log
+
+# Caching and plugins
+.playwright-mcp/
+.claude/
+
+# Screenshots and stray root samples
+/quirky-ui*.png
+/sample_raw.*
+/sample_humanized.*
+/sample_share_card.*
+/restored.*
+/out.*
+/card.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Keep: assets/ (banner + benchmark card used by README) IS tracked on purpose.

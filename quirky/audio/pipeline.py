@@ -277,6 +277,15 @@ class AudioHumanizer:
             else:
                 output_buffer.append(audio[last_end: start])
 
+            # Micro-pause: sometimes let the delivery breathe -- insert 80-250ms of
+            # low-level room tone (not digital silence) before a phrase, the hesitation
+            # rhythm TTS never produces. Slightly extends duration by design.
+            if idx > 0 and np.random.rand() < 0.3 * intensity:
+                pause_len = int(np.random.uniform(0.08, 0.25) * framerate)
+                room = np.random.normal(0.0, 1.0, pause_len)
+                room = AudioHumanizer._bandpass_filter(room, 80.0, 1200.0, framerate, order=2)
+                output_buffer.append(room * 0.0015)
+
             # Pitch-period jitter/shimmer + tilt + aspiration on the voiced segment
             segment = audio[start:end]
             seg_len = len(segment)
@@ -290,6 +299,18 @@ class AudioHumanizer:
                 jitter_seq = generate_pink_noise(n_periods) * jitter_mag
                 anchors = np.linspace(0, seg_len - 1, n_periods)
                 speed_curve = 1.0 + np.interp(np.arange(seg_len), anchors, jitter_seq)
+
+                # Intonation: F0 declination -- human phrases start slightly higher-pitched
+                # and drift down. A slow speed ramp (fast->slow) shifts pitch the same way
+                # since the warp is plain resampling. ~2% end-to-end at full intensity.
+                decl = 0.02 * intensity
+                speed_curve *= np.linspace(1.0 + decl, 1.0 - decl, seg_len)
+
+                # Phrase-final lengthening: humans stretch the last ~200ms of a phrase.
+                tail = min(int(0.2 * framerate), seg_len // 3)
+                if tail > 8:
+                    speed_curve[-tail:] *= (1.0 - 0.06 * intensity)
+
                 coords = np.cumsum(speed_curve)
                 coords = coords / coords[-1] * (seg_len - 1)
                 warped = np.interp(coords, np.arange(seg_len), segment)

@@ -187,5 +187,69 @@ def compare(
         typer.secho(f"Execution Error: {str(e)}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind address for the web dashboard"),
+    port: int = typer.Option(8000, "--port", "-p", help="Port for the web dashboard")
+):
+    """
+    Starts the local web dashboard (FastAPI + static UI) at http://HOST:PORT.
+    """
+    typer.secho(f"Starting Quirky web dashboard at http://{host}:{port} ...", fg=typer.colors.CYAN)
+    from quirky.api.main import start_server
+    start_server(host=host, port=port)
+
+
+def _run_dl(fn_name: str, *args):
+    """Run a quirky.plugins.dl function, surfacing a clean install hint if the extra is missing."""
+    from quirky.plugins import dl
+    try:
+        return getattr(dl, fn_name)(*args)
+    except dl.DLNotInstalled as e:
+        typer.secho(str(e), fg=typer.colors.YELLOW)
+        raise typer.Exit(1)
+
+
+@app.command()
+def upscale(
+    asset: str = typer.Option(..., "--asset", "-a", help="Image to upscale"),
+    output: str = typer.Option(..., "--output", "-o", help="Where to write the result")
+):
+    """Neural super-resolution (Real-ESRGAN). Requires the optional quirky[dl] extra."""
+    import numpy as np
+    from PIL import Image as _Image
+    img = np.array(_Image.open(asset).convert("RGB"))
+    out = _run_dl("upscale", img)
+    _Image.fromarray(out).save(output)
+    typer.secho(f"Upscaled -> {output}", fg=typer.colors.GREEN)
+
+
+@app.command()
+def repaint(
+    asset: str = typer.Option(..., "--asset", "-a", help="Image to repaint"),
+    mask: str = typer.Option(..., "--mask", "-m", help="Mask PNG (white = area to repaint)"),
+    output: str = typer.Option(..., "--output", "-o", help="Where to write the result")
+):
+    """Neural inpaint / object+spot repaint (LaMa). Requires the optional quirky[dl] extra."""
+    import numpy as np
+    from PIL import Image as _Image
+    img = np.array(_Image.open(asset).convert("RGB"))
+    msk = np.array(_Image.open(mask).convert("L"))
+    out = _run_dl("repaint", img, msk)
+    _Image.fromarray(out).save(output)
+    typer.secho(f"Repainted -> {output}", fg=typer.colors.GREEN)
+
+
+@app.command(name="voice-clone")
+def voice_clone(
+    asset: str = typer.Option(..., "--asset", "-a", help="Source speech to re-timbre"),
+    reference: str = typer.Option(..., "--reference", "-r", help="Reference clip of the target voice"),
+    output: str = typer.Option(..., "--output", "-o", help="Where to write the cloned-voice audio")
+):
+    """Zero-shot voice conversion toward a reference voice. Requires the optional quirky[dl] extra."""
+    _run_dl("clone_voice", asset, reference, output)
+    typer.secho(f"Voice-converted -> {output}", fg=typer.colors.GREEN)
+
+
 if __name__ == "__main__":
     app()
