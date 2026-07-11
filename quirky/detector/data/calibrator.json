@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "kind": "logistic",
+  "features": [
+    "burstiness",
+    "cliche_density",
+    "repetition",
+    "prompt_leak",
+    "hedge_density",
+    "filler_density",
+    "contraction_deficit",
+    "sent_len_cv_inv",
+    "ai_punct_density",
+    "type_token_ratio_inv"
+  ],
+  "mean": [
+    0.918255,
+    9.764834,
+    0.000159,
+    0.0,
+    1.995428,
+    2.778319,
+    0.169167,
+    0.734427,
+    0.0,
+    0.195405
+  ],
+  "std": [
+    0.068801,
+    10.26062,
+    0.001579,
+    0.0,
+    2.672084,
+    2.104054,
+    0.246209,
+    0.13353,
+    0.0,
+    0.0623
+  ],
+  "coef": [
+    0.033478,
+    2.306727,
+    -0.116888,
+    0.0,
+    1.252711,
+    0.541018,
+    0.716686,
+    0.554232,
+    0.0,
+    0.015547
+  ],
+  "intercept": 0.11384,
+  "n_samples": 100,
+  "metrics": {
+    "train_acc": 1.0,
+    "brier": 0.0011
+  }
+}
