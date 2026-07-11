@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, feat/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        version: "latest"
+        enable-cache: true
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: uv sync --extra dev --extra agent
+
+    - name: Run Ruff Linter
+      run: uv run ruff check quirky/ tests/
+
+    - name: Run Pytest
+      run: uv run pytest -q
+
+    - name: Run Quirky Evaluation Suite
+      run: uv run python quirky/benchmarks/eval_suite.py
+      continue-on-error: true
