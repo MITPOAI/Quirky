@@ -1,0 +1,14 @@
+<!-- quirky:begin v1 -->
+---
+description: Apply Quirky anti-slop rules on markdown and text edits
+globs: ["**/*.md", "**/*.txt", "**/*.mdx"]
+alwaysApply: true
+---
+Follow AGENTS.md at the repo root:
+- Eliminate LLM clichés, hedges, and filler.
+- Use contractions where appropriate.
+- Never introduce em/en dashes or ellipses in prose edits.
+- Do not touch code, shell commands, or numerical values in text.
+- Run `quirky_score_text` / `quirky_fix_text` on edits.
+- Keep prose modifications minimal and surgical.
+<!-- quirky:end -->
