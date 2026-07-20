@@ -44,3 +44,4 @@ Thumbs.db
 *.swp
 
 # Keep: assets/ (banner + benchmark card used by README) IS tracked on purpose.
+/tests

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quirky Human Preference Engine</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231e2947'/%3E%3Cellipse cx='16' cy='13' rx='8' ry='6' fill='%23f5f0e4'/%3E%3Cpath d='M8 13a8 6 0 0116 0z' fill='%23262a2e'/%3E%3Ccircle cx='13' cy='9' r='2' fill='%23fff'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="index.css?v=3" />
+  <link rel="stylesheet" href="index.css?v=5" />
 </head>
 <body>
   <header class="hdr">
@@ -55,8 +55,18 @@
           <div class="ctrl-top"><label>Grain</label><span id="delta-v">3%</span></div>
           <input type="range" id="delta" min="0" max="10" value="3" />
         </div>
+        <label class="lock-row img-only" id="lock-row">
+          <input type="checkbox" id="lock" />
+          <span><b>Fidelity lock</b> — minimal edit: stop as soon as the target is met (protects the image)</span>
+        </label>
+        <label class="lock-row img-only" id="attribute-row">
+          <input type="checkbox" id="attribute" />
+          <span><b>Leave attribution</b> — when cleaning, replace stripped metadata with one honest "Powered by Quirky" tag instead of leaving it blank</span>
+        </label>
       </div>
 
+      <button class="go ghost img-only" id="diagnose" disabled>🔍 Diagnose (X-ray)</button>
+      <button class="go ghost img-only" id="clean" disabled>🧹 Clean metadata</button>
       <button class="go" id="go" disabled>Humanize</button>
     </section>
 
@@ -71,6 +81,30 @@
       <div class="state busy" id="busy" hidden>
         <div class="spin"></div>
         <p id="busy-t">Processing…</p>
+      </div>
+
+      <!-- Diagnosis / Slop X-ray panel -->
+      <div class="state diag" id="diag" hidden>
+        <div class="diag-head">
+          <h3>Slop X-ray</h3>
+          <p class="diag-sub">Warm zones read as synthetic. Pick the fixes to apply, then humanize.</p>
+        </div>
+        <div class="xray-wrap"><img id="xray-img" alt="slop heatmap" /></div>
+        <div class="fp-line" id="fp-line"></div>
+        <h4 class="cards-h">Recommended fixes</h4>
+        <div class="cards" id="cards"></div>
+        <button class="go" id="go2">Humanize selected →</button>
+      </div>
+
+      <!-- Clean / metadata panel -->
+      <div class="state clean" id="clean-panel" hidden>
+        <div class="diag-head">
+          <h3>Metadata scan</h3>
+          <p class="diag-sub" id="clean-sub">What was embedded in this file, and what Quirky stripped.</p>
+        </div>
+        <div class="cards" id="clean-entries"></div>
+        <div class="clean-result" id="clean-result"></div>
+        <a class="go" id="clean-download" href="#" download>⬇ Download cleaned file</a>
       </div>
 
       <div class="state result" id="result" hidden>
@@ -97,12 +131,26 @@
         <div class="metrics" id="metrics">
           <h4 class="metrics-h">Detector — after</h4>
           <div class="mrows" id="mrows"></div>
+          <div class="audit-line" id="audit-line" hidden></div>
+        </div>
+
+        <!-- Re-map ("map it again"): re-diagnose the humanized output vs. the original -->
+        <div class="remap-block" id="remap-block" hidden>
+          <button class="go ghost" id="remap-btn">🔁 Re-map vs original</button>
+          <div class="remap-result" id="remap-result" hidden>
+            <div class="remap-head">
+              <h4>Delta heatmap — red got worse, green improved</h4>
+              <p class="remap-rec" id="remap-rec"></p>
+            </div>
+            <div class="xray-wrap"><img id="remap-img" alt="delta heatmap" /></div>
+            <div class="remap-lists" id="remap-lists"></div>
+          </div>
         </div>
       </div>
     </section>
   </main>
 
   <footer class="ftr">Quirky · local math &amp; physics · © 2026 MITPO</footer>
-  <script src="index.js?v=3"></script>
+  <script src="index.js?v=5"></script>
 </body>
 </html>

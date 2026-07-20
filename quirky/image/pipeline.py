@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image, ImageFilter
 import cv2
-from typing import Tuple
+from typing import Tuple, Optional, Set
 
 from quirky.image.transforms import (
     detect_face_regions,
@@ -205,18 +205,34 @@ class ImageHumanizer:
         output_path: str,
         intensity: float = 0.5,
         gamma: float = 0.6,
-        delta: float = 0.03
+        delta: float = 0.03,
+        enabled_fixes: Optional[Set[str]] = None,
     ) -> None:
         """
         Applies local neural texture reconstruction and procedural perturbation overlays.
-        
+
         Parameters:
         - img_path: Path to raw input image.
         - output_path: Path to write the humanized output.
         - intensity: Global strength of changes (0.0 to 1.0).
         - gamma: local blend weight between CodeFormer (crisp detail) and GFPGAN (smooth restoration).
         - delta: noise blend amplitude.
+        - enabled_fixes: optional set of fix ids to apply. When None (default) every
+          corrective stage runs exactly as before. When a set is given, each stage is
+          gated by its id so the dashboard's accept/reject cards can drive the pipeline.
+          Ids: white_balance, clahe_lighting, spot_removal, face_relight,
+          plastic_texture, spectrum, channel_corr.
         """
+        def _on(fix_id: str) -> bool:
+            return enabled_fixes is None or fix_id in enabled_fixes
+
+        # Multiplier gates for stages that are folded into `intensity` rather than
+        # guarded by an `if` (avoids changing default behavior: all gates are 1.0
+        # when enabled_fixes is None).
+        tex_gate = 1.0 if _on("plastic_texture") else 0.0
+        grain_gate = 1.0 if (_on("plastic_texture") or _on("spectrum")) else 0.0
+        bayer_gate = 1.0 if _on("channel_corr") else 0.0
+
         # Load image
         img = Image.open(img_path).convert("RGB")
         img_np = np.array(img).astype(float) / 255.0
@@ -227,13 +243,13 @@ class ImageHumanizer:
         #    then apply only the corrections it needs, scaled by the deficiency.
         applied = {}
         cast = estimate_color_cast(img_np)
-        if cast > 0.04:  # visible color cast (AI renders skew cold/teal)
+        if _on("white_balance") and cast > 0.04:  # visible color cast (AI renders skew cold/teal)
             wb_strength = float(np.clip(cast * 4.0, 0.0, 0.8)) * intensity
             img_np = apply_gray_world_wb(img_np, wb_strength)
             applied["white_balance"] = round(wb_strength, 3)
 
         flatness = estimate_lighting_flatness(gray_f)
-        if flatness > 0.4:  # variance-dead local lighting
+        if _on("clahe_lighting") and flatness > 0.4:  # variance-dead local lighting
             clahe_strength = float(np.clip((flatness - 0.4) * 1.2, 0.0, 0.6)) * intensity
             img_np = apply_clahe_lighting(img_np, clahe_strength)
             applied["clahe_lighting"] = round(clahe_strength, 3)
@@ -250,12 +266,12 @@ class ImageHumanizer:
         # scoped to the face/skin region so real detail is preserved.
         cur_gray = (0.2126 * img_np[:, :, 0] + 0.7152 * img_np[:, :, 1] + 0.0722 * img_np[:, :, 2])
         blemishes = detect_blemishes((cur_gray * 255.0).astype(np.uint8), region_mask=face_mask)
-        if blemishes.max() > 0:
+        if _on("spot_removal") and blemishes.max() > 0:
             img_np = remove_spots(img_np, blemishes, strength=0.85 * intensity)
             applied["spot_removal_px"] = int((blemishes > 0).sum())
 
         # Physical portrait relighting (Retinex Y-split), face-targeted when detected
-        if face_mask is not None:
+        if face_mask is not None and _on("face_relight"):
             img_np, relight_meta = analyze_and_fix_portrait_lighting(img_np, intensity, face_mask=face_mask)
             applied["face_relight"] = relight_meta["relight"]
         applied["face_detected"] = face_mask is not None
@@ -297,22 +313,23 @@ class ImageHumanizer:
         f_blended = gamma * code_np + (1 - gamma) * gfp_smooth
         
         # Apply blended textures only within semantic mask regions, scaled by global intensity
-        img_textured = img_np * (1.0 - mask_3d * intensity) + f_blended * (mask_3d * intensity)
+        tex_intensity = intensity * tex_gate
+        img_textured = img_np * (1.0 - mask_3d * tex_intensity) + f_blended * (mask_3d * tex_intensity)
 
         # 2b. Photographic Color Grading & Texture Painting (Local Skin Warmth & Contrast)
         # Generative portraits often look cold or blue-green. We apply warm Kodak-style grading
         # and boost local contrast inside the semantic mask.
         grading_shift = np.zeros_like(img_textured)
-        grading_shift[:, :, 0] = 0.06 * intensity * semantic_mask  # Boost Red (warmth)
-        grading_shift[:, :, 1] = 0.02 * intensity * semantic_mask  # Boost Green
-        grading_shift[:, :, 2] = -0.04 * intensity * semantic_mask # Reduce Blue (cool tones)
-        
+        grading_shift[:, :, 0] = 0.06 * tex_intensity * semantic_mask  # Boost Red (warmth)
+        grading_shift[:, :, 1] = 0.02 * tex_intensity * semantic_mask  # Boost Green
+        grading_shift[:, :, 2] = -0.04 * tex_intensity * semantic_mask # Reduce Blue (cool tones)
+
         # Apply color grade shift
         img_textured = img_textured + grading_shift
-        
+
         # Apply a subtle local contrast stretch on masked zones
         mean_val = np.mean(img_textured)
-        img_textured = img_textured * (1.0 + 0.08 * intensity * mask_3d) - 0.08 * intensity * mask_3d * mean_val
+        img_textured = img_textured * (1.0 + 0.08 * tex_intensity * mask_3d) - 0.08 * tex_intensity * mask_3d * mean_val
         img_textured = np.clip(img_textured, 0.0, 1.0)
 
         # 2c. Specular Disruption via Fractional Brownian Motion (fBm)
@@ -328,14 +345,14 @@ class ImageHumanizer:
         cos_theta_3d = np.expand_dims(np.cos(theta_i), axis=2)
         
         # Apply local specular micro-facet scattering disruption
-        alpha = 0.03 * intensity
+        alpha = 0.03 * intensity * tex_gate
         specular_disruption = 1.0 + alpha * fbm_3d * cos_theta_3d * mask_3d
         img_textured = np.clip(img_textured * specular_disruption, 0.0, 1.0)
 
         # 3. Sensor reconstruction + physically-based grain
         # 3a. Bayer CFA demosaic round-trip -> reinstalls inter-channel color correlation
         #     and faint chromatic fringing that real cameras leave and diffusion lacks.
-        img_textured = bayer_demosaic_roundtrip(img_textured, strength=0.18 * intensity)
+        img_textured = bayer_demosaic_roundtrip(img_textured, strength=0.18 * intensity * bayer_gate)
 
         # 3b. Poisson-Gaussian heteroscedastic sensor noise (photon-transfer model),
         #     var = a*I + b, gently recolored (beta~0.5) so it keeps enough high-frequency
@@ -343,7 +360,7 @@ class ImageHumanizer:
         #     delta keeps the original grain knob meaningful as the overall amplitude.
         grain = apply_poisson_gaussian_noise(
             img_textured,
-            amplitude=delta * intensity * 22.0,
+            amplitude=delta * intensity * 22.0 * grain_gate,
             a=0.010,
             b=0.0006,
             spectral_beta=0.5,
@@ -365,5 +382,6 @@ class ImageHumanizer:
             "modality": "image",
             "params": {"intensity": intensity, "gamma": gamma, "delta": delta},
             "cv_corrections": applied,
+            "enabled_fixes": (sorted(enabled_fixes) if enabled_fixes is not None else "all"),
             "output_path": output_path,
         }

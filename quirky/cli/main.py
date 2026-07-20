@@ -37,7 +37,13 @@ def detect(
 def humanize(
     asset: str = typer.Option(..., "--asset", "-a", help="Path to the synthetic asset to optimize"),
     output: str = typer.Option(..., "--output", "-o", help="Path to write the humanized asset"),
-    intensity: int = typer.Option(50, "--intensity", "-i", min=0, max=100, help="Humanization intensity (0-100)")
+    intensity: int = typer.Option(50, "--intensity", "-i", min=0, max=100, help="Humanization intensity (0-100)"),
+    fixes: str = typer.Option(None, "--fixes", help="Comma-separated fix ids to apply (images only). "
+                                                    "Default = all. e.g. white_balance,clahe_lighting,plastic_texture"),
+    lock: bool = typer.Option(False, "--lock/--no-lock", help="Minimal-edit fidelity lock (images only): climb "
+                                                              "intensity only until the target is met."),
+    target: float = typer.Option(0.15, "--target", min=0.0, max=1.0, help="Target ai_score for --lock"),
+    min_ssim: float = typer.Option(0.86, "--min-ssim", min=0.0, max=1.0, help="SSIM fidelity floor for --lock"),
 ):
     """
     Optimizes a synthetic asset to restore realistic human imperfections and details.
@@ -46,14 +52,25 @@ def humanize(
         if not os.path.exists(asset):
             typer.secho(f"Error: Asset file '{asset}' does not exist.", fg=typer.colors.RED)
             raise typer.Exit(1)
-            
+
         ext = os.path.splitext(asset)[1].lower()
         strength = intensity / 100.0
-        
+        enabled_fixes = set(f.strip() for f in fixes.split(",") if f.strip()) if fixes else None
+
         typer.secho(f"Humanizing {asset} with intensity {intensity}%...", fg=typer.colors.CYAN)
-        
+
         if ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp"]:
-            ImageHumanizer.humanize(asset, output, intensity=strength)
+            if lock:
+                from quirky.diagnose import humanize_locked
+                res = humanize_locked(asset, output, target_ai=target, min_ssim=min_ssim,
+                                      enabled_fixes=enabled_fixes)
+                typer.secho(
+                    f"  lock: target_met={res['target_met']} intensity={res['chosen_intensity']} "
+                    f"ai {res['original_ai_score']}->{res['final_ai_score']} ssim={res['final_ssim']}",
+                    fg=typer.colors.YELLOW)
+                typer.secho(f"  {res['reason']}", fg=typer.colors.WHITE)
+            else:
+                ImageHumanizer.humanize(asset, output, intensity=strength, enabled_fixes=enabled_fixes)
         elif ext in [".wav"]:
             AudioHumanizer.humanize(asset, output, intensity=strength)
         elif ext in [".txt", ".md", ".json"]:
@@ -186,6 +203,165 @@ def compare(
     except Exception as e:
         typer.secho(f"Execution Error: {str(e)}", fg=typer.colors.RED)
         raise typer.Exit(1)
+
+@app.command()
+def xray(
+    asset: str = typer.Option(..., "--asset", "-a", help="Image to analyze"),
+    output: str = typer.Option("xray.png", "--output", "-o", help="Where to write the heatmap overlay PNG"),
+    alpha: float = typer.Option(0.55, "--alpha", min=0.0, max=1.0, help="Heatmap blend strength"),
+):
+    """
+    Slop X-ray: render an explainable heatmap showing WHERE an image reads as synthetic.
+    """
+    try:
+        from quirky.diagnose import maps
+        gray, rgb = maps.load_gray_rgb(asset)
+        comp, _ = maps.composite_slop_map(gray)
+        maps.render_heatmap_overlay(rgb, comp, output, alpha=alpha)
+        typer.secho(f"Slop X-ray written to {output}", fg=typer.colors.GREEN)
+        typer.secho(f"  slop mean={comp.mean():.3f}  peak={comp.max():.3f}", fg=typer.colors.YELLOW)
+        typer.secho(f"  hotspots: {maps.region_scores(comp)}", fg=typer.colors.WHITE)
+    except Exception as e:
+        typer.secho(f"X-ray Error: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+@app.command()
+def diagnose(
+    asset: str = typer.Option(..., "--asset", "-a", help="Image to diagnose"),
+    intensity: int = typer.Option(60, "--intensity", "-i", min=0, max=100, help="Intensity used to size fix params"),
+):
+    """
+    Prescriptive diagnosis: list the named defects and the fix each one recommends.
+    """
+    try:
+        from quirky.diagnose import diagnose_image
+        d = diagnose_image(asset, intensity=intensity / 100.0)
+        print(json.dumps(d, indent=2))
+    except Exception as e:
+        typer.secho(f"Diagnose Error: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+@app.command()
+def fingerprint(
+    asset: str = typer.Option(..., "--asset", "-a", help="Image to fingerprint"),
+):
+    """
+    Guess which generator likely produced an image (heuristic) + the inverse fixes it calls for.
+    """
+    try:
+        from quirky.diagnose import fingerprint_image
+        print(json.dumps(fingerprint_image(asset), indent=2))
+    except Exception as e:
+        typer.secho(f"Fingerprint Error: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+@app.command()
+def audit(
+    before: str = typer.Argument(..., help="Original (pre-humanize) asset"),
+    after: str = typer.Argument(..., help="Humanized asset"),
+    oracle: str = typer.Option("auto", "--oracle", help="Oracle: auto | ensemble | neural"),
+):
+    """
+    Honesty check: score before/after against an EXTERNAL detector, not Quirky's own metric.
+    """
+    try:
+        from quirky.diagnose import audit as run_audit, get_oracle, EnsembleHeuristicOracle
+        orc = EnsembleHeuristicOracle() if oracle == "ensemble" else get_oracle(oracle)
+        print(json.dumps(run_audit(before, after, orc), indent=2))
+    except Exception as e:
+        typer.secho(f"Audit Error: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+@app.command()
+def clean(
+    asset: str = typer.Option(..., "--asset", "-a", help="Image to scrub metadata from"),
+    output: str = typer.Option(None, "--output", "-o", help="Where to write the cleaned image (default: <name>.clean<ext>)"),
+    attribute: bool = typer.Option(False, "--attribute/--no-attribute",
+                                   help="Leave one honest 'Powered by Quirky' tag instead of a silent blank"),
+    scan_only: bool = typer.Option(False, "--scan-only", help="Report embedded metadata; write nothing"),
+):
+    """
+    Clean: scrub embedded metadata (EXIF / PNG-text / generator-parameter leaks) via a clean re-encode.
+    """
+    try:
+        from quirky.clean import scan_metadata, clean_metadata
+        if not os.path.exists(asset):
+            typer.secho(f"Error: Asset file '{asset}' does not exist.", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        if scan_only:
+            report = scan_metadata(asset)
+            print(json.dumps(report, indent=2))
+            typer.secho(f"  {report['meaningful_count']} meaningful field(s), "
+                        f"{report['leak_count']} look like generator leaks", fg=typer.colors.YELLOW)
+            return
+
+        stem, ext = os.path.splitext(asset)
+        out = output or f"{stem}.clean{ext}"
+        res = clean_metadata(asset, out, attribute=attribute)
+        print(json.dumps(res, indent=2))
+        color = typer.colors.GREEN if res["fully_clean"] else typer.colors.YELLOW
+        typer.secho(f"Cleaned -> {out}  (fully_clean={res['fully_clean']})", fg=color)
+    except Exception as e:
+        typer.secho(f"Clean Error: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+@app.command()
+def remap(
+    before: str = typer.Argument(..., help="Original (pre-edit) asset"),
+    after: str = typer.Argument(..., help="Edited asset to re-diagnose"),
+    intensity: int = typer.Option(60, "--intensity", "-i", min=0, max=100, help="Intensity used to size fix params"),
+    output: str = typer.Option(None, "--output", "-o", help="Optional path to save the red/green delta heatmap PNG"),
+):
+    """
+    Re-map: re-diagnose an edited image against the original -- resolved / remaining / new
+    defects, plus a red(worse)/green(better) delta heatmap.
+    """
+    try:
+        from quirky.diagnose import remap_image
+        res = remap_image(before, after, intensity=intensity / 100.0)
+        if output:
+            import base64
+            b64 = res["delta_heatmap"].split(",", 1)[1]
+            with open(output, "wb") as f:
+                f.write(base64.b64decode(b64))
+            typer.secho(f"Delta heatmap written to {output}", fg=typer.colors.GREEN)
+        printable = {k: v for k, v in res.items() if k != "delta_heatmap"}
+        print(json.dumps(printable, indent=2))
+        typer.secho(f"  recommendation: {res['recommendation']} -- {res['note']}", fg=typer.colors.YELLOW)
+    except Exception as e:
+        typer.secho(f"Remap Error: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+@app.command(name="remap-loop")
+def remap_loop_cmd(
+    asset: str = typer.Option(..., "--asset", "-a", help="Image to iteratively diagnose -> humanize -> re-map"),
+    output: str = typer.Option(..., "--output", "-o", help="Where to write the final result"),
+    min_ssim: float = typer.Option(0.80, "--min-ssim", min=0.0, max=1.0, help="Fidelity floor vs. the original"),
+    max_rounds: int = typer.Option(3, "--max-rounds", min=1, max=10),
+    start_intensity: int = typer.Option(40, "--start-intensity", min=0, max=100),
+    step: int = typer.Option(20, "--step", min=1, max=100),
+):
+    """
+    Closed loop: diagnose -> humanize -> re-map, repeated until clean, diminishing
+    returns, the fidelity floor would be breached, or max_rounds is hit.
+    """
+    try:
+        from quirky.diagnose import remap_loop
+        res = remap_loop(asset, output, min_ssim=min_ssim, max_rounds=max_rounds,
+                         start_intensity=start_intensity / 100.0, step=step / 100.0)
+        print(json.dumps(res, indent=2))
+        typer.secho(f"Saved final result to {output} after {res['total_rounds']} round(s)", fg=typer.colors.GREEN)
+    except Exception as e:
+        typer.secho(f"Remap-loop Error: {str(e)}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
 
 @app.command()
 def serve(

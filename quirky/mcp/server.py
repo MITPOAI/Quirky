@@ -208,6 +208,185 @@ def quirky_run_agent(
         return {"error": str(e), "attribution": ATTRIBUTION}
 
 
+@mcp.tool()
+def quirky_diagnose_image(path: str, intensity: float = 0.6) -> Dict[str, Any]:
+    """
+    Prescriptive diagnosis of an image: a list of named defects (color cast, flat
+    lighting, plastic skin, spectrum, etc.) each with severity, a plain-English detail,
+    and the specific fix id it recommends. Feeds accept/reject "fix cards".
+    """
+    try:
+        from quirky.diagnose import diagnose_image
+        res = diagnose_image(os.path.abspath(path), intensity=intensity)
+        res["attribution"] = ATTRIBUTION
+        return res
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
+@mcp.tool()
+def quirky_xray_image(path: str, output_path: str | None = None, alpha: float = 0.55) -> Dict[str, Any]:
+    """
+    Render a Slop X-ray heatmap overlay (PNG) that shows WHERE an image reads as
+    synthetic. Writes to <name>.xray.png unless output_path is given.
+    """
+    try:
+        from quirky.diagnose import maps
+        abs_in = os.path.abspath(path)
+        stem, _ = os.path.splitext(abs_in)
+        abs_out = os.path.abspath(output_path) if output_path else f"{stem}.xray.png"
+        gray, rgb = maps.load_gray_rgb(abs_in)
+        comp, _ = maps.composite_slop_map(gray)
+        maps.render_heatmap_overlay(rgb, comp, abs_out, alpha=alpha)
+        return {
+            "output_path": abs_out,
+            "slop_mean": round(float(comp.mean()), 4),
+            "slop_peak": round(float(comp.max()), 4),
+            "hotspots": maps.region_scores(comp),
+            "attribution": ATTRIBUTION,
+        }
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
+@mcp.tool()
+def quirky_fingerprint_image(path: str) -> Dict[str, Any]:
+    """
+    Heuristic guess of which generator likely produced an image (SD/SDXL VAE grid, GAN,
+    over-smoothed render, generic diffusion, or real camera) plus the inverse fixes it
+    calls for. A statistical prior, not a trained classifier.
+    """
+    try:
+        from quirky.diagnose import fingerprint_image
+        res = fingerprint_image(os.path.abspath(path))
+        res["attribution"] = ATTRIBUTION
+        return res
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
+@mcp.tool()
+def quirky_humanize_locked(
+    path: str,
+    output_path: str | None = None,
+    target_ai: float = 0.15,
+    min_ssim: float = 0.86,
+    fixes: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Minimal-edit humanize for images: climb intensity only until ai_score <= target_ai
+    while SSIM to the original stays >= min_ssim. Returns the chosen intensity, whether
+    the target was met, and the per-step trace. `fixes` is an optional comma-separated
+    list of fix ids to restrict which corrections run.
+    """
+    try:
+        from quirky.diagnose import humanize_locked
+        abs_in = os.path.abspath(path)
+        stem, ext = os.path.splitext(abs_in)
+        abs_out = os.path.abspath(output_path) if output_path else f"{stem}.locked{ext}"
+        enabled = set(f.strip() for f in fixes.split(",") if f.strip()) if fixes else None
+        res = humanize_locked(abs_in, abs_out, target_ai=target_ai, min_ssim=min_ssim,
+                              enabled_fixes=enabled)
+        res["attribution"] = ATTRIBUTION
+        return res
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
+@mcp.tool()
+def quirky_audit_transfer(before: str, after: str, oracle: str = "auto") -> Dict[str, Any]:
+    """
+    Honesty check: score before/after against an EXTERNAL detector oracle (separate from
+    Quirky's own ai_score) and report the true reduction. oracle: auto | ensemble | neural.
+    """
+    try:
+        from quirky.diagnose import audit, get_oracle, EnsembleHeuristicOracle
+        orc = EnsembleHeuristicOracle() if oracle == "ensemble" else get_oracle(oracle)
+        res = audit(os.path.abspath(before), os.path.abspath(after), orc)
+        res["attribution"] = ATTRIBUTION
+        return res
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
+@mcp.tool()
+def quirky_scan_metadata(path: str) -> Dict[str, Any]:
+    """
+    Read-only report of every embedded metadata field in an image (EXIF, PNG text
+    chunks, etc), flagging entries that look like AI-generator leaks (prompt, seed,
+    sampler, model hash...). Never modifies the file.
+    """
+    try:
+        from quirky.clean import scan_metadata
+        res = scan_metadata(os.path.abspath(path))
+        res["attribution"] = ATTRIBUTION
+        return res
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
+@mcp.tool()
+def quirky_clean_metadata(path: str, output_path: str | None = None, attribute: bool = False) -> Dict[str, Any]:
+    """
+    Clean: scrub all embedded metadata via a clean re-encode (drops EXIF, PNG text
+    chunks, generator-parameter leaks). If attribute=True, leaves one honest
+    "Powered by Quirky (MITPO)" tag instead of a silent blank. Writes to
+    <name>.clean<ext> unless output_path is given.
+    """
+    try:
+        from quirky.clean import clean_metadata
+        abs_in = os.path.abspath(path)
+        stem, ext = os.path.splitext(abs_in)
+        abs_out = os.path.abspath(output_path) if output_path else f"{stem}.clean{ext}"
+        res = clean_metadata(abs_in, abs_out, attribute=attribute)
+        res["attribution"] = ATTRIBUTION
+        return res
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
+@mcp.tool()
+def quirky_remap_image(before: str, after: str, intensity: float = 0.6) -> Dict[str, Any]:
+    """
+    Re-map: re-diagnose an edited image against a fresh diagnosis of the original.
+    Returns resolved/remaining/newly-introduced defect ids, the slop-score delta, a
+    red(worse)/green(better) delta heatmap, and a plain recommendation (clean,
+    keep_going, diminishing_returns, over_cooked).
+    """
+    try:
+        from quirky.diagnose import remap_image
+        res = remap_image(os.path.abspath(before), os.path.abspath(after), intensity=intensity)
+        res["attribution"] = ATTRIBUTION
+        return res
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
+@mcp.tool()
+def quirky_remap_loop(
+    path: str,
+    output_path: str | None = None,
+    min_ssim: float = 0.80,
+    max_rounds: int = 3,
+) -> Dict[str, Any]:
+    """
+    Closed loop: diagnose -> humanize -> re-map, repeated until clean, diminishing
+    returns, the fidelity floor to the ORIGINAL would be breached, or max_rounds is
+    hit. Returns the full round-by-round trace. Writes to <name>.remapped<ext>
+    unless output_path is given.
+    """
+    try:
+        from quirky.diagnose import remap_loop
+        abs_in = os.path.abspath(path)
+        stem, ext = os.path.splitext(abs_in)
+        abs_out = os.path.abspath(output_path) if output_path else f"{stem}.remapped{ext}"
+        res = remap_loop(abs_in, abs_out, min_ssim=min_ssim, max_rounds=max_rounds)
+        res["attribution"] = ATTRIBUTION
+        return res
+    except Exception as e:
+        return {"error": str(e), "attribution": ATTRIBUTION}
+
+
 if __name__ == "__main__":
     mcp.run()
 
